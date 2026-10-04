@@ -89,16 +89,24 @@ describe('turn timers', () => {
     expect(env.repos.slots.getByOverall(draftId, 1)?.status).toBe('skipped');
   });
 
-  it('disabling the timer disarms it; enabling arms the next turn', async () => {
+  it('changing the timer mid-turn re-derives the running deadline; disabling disarms it', async () => {
     const env = createServiceEnv();
     const draftId = makeDraft(env);
     await env.service.start(draftId, ADMIN);
-    await env.service.updateConfig(draftId, { skipTimerSeconds: 0 }, ADMIN);
-    // Existing deadline is kept for the running turn only if still configured; disabled -> the engine deadline remains but
-    // new turns get none.
-    await env.service.skip(draftId, ADMIN);
+    const startedAt = env.repos.drafts.getById(draftId)!.turnStartedAt!;
+    await env.service.updateConfig(draftId, { skipTimerSeconds: 1200 }, ADMIN);
+    expect(env.repos.drafts.getById(draftId)?.turnDeadlineAt).toBe(new Date(Date.parse(startedAt) + 1_200_000).toISOString());
+    await env.scheduler.advance(700_000); // old 10-minute deadline passed, new one has not
+    expect(env.repos.slots.getByOverall(draftId, 1)?.status).toBe('current');
+    await env.service.updateConfig(draftId, { skipTimerSeconds: null }, ADMIN);
     expect(env.repos.drafts.getById(draftId)?.turnDeadlineAt).toBeNull();
     expect(env.timers.armedCount()).toBe(0);
+    await env.scheduler.advance(3_600_000);
+    expect(env.repos.slots.getByOverall(draftId, 1)?.status).toBe('current');
+    await env.service.updateConfig(draftId, { skipTimerSeconds: 60 }, ADMIN);
+    // Re-enabled: the deadline is derived from the turn start, which is long past, so it fires on the next sweep/timer.
+    await env.scheduler.advance(1_000);
+    expect(env.repos.slots.getByOverall(draftId, 1)?.status).toBe('skipped');
   });
 });
 

@@ -6,6 +6,7 @@ import { actorFor, isDraftAdmin, requireAdmin, requireCurrentDraft, requireOpenD
 import { defer, send, updateMessage } from '../respond.js';
 import { fullOrderEmbed, orderEmbed, prepicksEmbed, rosterEmbed, allRostersEmbed, seatName, statusButtons, statusEmbed, tradeEmbed } from '../views/index.js';
 import { refreshTradeMessage } from '../commands/draft.js';
+import { describeResolution } from '../commands/trade.js';
 
 type Interaction = MessageComponentInteraction<'cached'> | ModalSubmitInteraction<'cached'>;
 
@@ -138,11 +139,11 @@ const tradeHandler: ComponentHandler = {
     let text: string;
     if (action === 'accept' || action === 'reject') {
       const result = await service.respondTrade(draftId, tradeId, action === 'accept', actorFor(interaction, ctx));
-      text = action === 'reject' ? `❌ You rejected trade #${tradeId}.` : result.executed ? `✅ Trade #${tradeId} executed.` : result.awaitingAdmin ? `✅ Accepted. An admin must approve trade #${tradeId}.` : `Trade #${tradeId} updated.`;
+      text = describeResolution(tradeId, action, result);
     } else if (action === 'approve' || action === 'deny') {
       const actor = requireAdmin(interaction, ctx);
       const result = await service.adminResolveTrade(draftId, tradeId, action === 'approve', actor);
-      text = action === 'approve' ? (result.executed ? `✅ Trade #${tradeId} approved and executed.` : `Trade #${tradeId} updated.`) : `⛔ Trade #${tradeId} denied.`;
+      text = describeResolution(tradeId, action, result);
     } else if (action === 'cancel') {
       await service.cancelTrade(draftId, tradeId, isDraftAdmin(interaction, ctx) ? { id: interaction.user.id, kind: 'admin' } : actorFor(interaction, ctx));
       text = `🚫 Trade #${tradeId} cancelled.`;

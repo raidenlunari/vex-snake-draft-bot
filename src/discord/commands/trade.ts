@@ -1,7 +1,7 @@
 import { InteractionContextType, SlashCommandBuilder, type AutocompleteInteraction, type ChatInputCommandInteraction } from 'discord.js';
 import { DraftError } from '../../domain/errors.js';
 import type { Draft } from '../../domain/types.js';
-import type { TradeView } from '../../engine/tradeEngine.js';
+import type { TradeResolution } from '../../engine/tradeEngine.js';
 import type { BotContext, Command } from '../context.js';
 import { actorFor, isDraftAdmin, participantChoices, requireCurrentDraft, resolveParticipantRef, resolveUserSeat, respondAutocomplete } from '../permissions.js';
 import { defer, send, sendText } from '../respond.js';
@@ -32,9 +32,20 @@ function splitRefs(text: string): string[] {
   return text.split(/[,;]+/).map((s) => s.trim()).filter(Boolean);
 }
 
-/** Posts (or re-posts) a trade in the draft channel with action buttons and stores the message id. */
-export async function postTradeMessage(ctx: BotContext, draft: Draft, view: TradeView): Promise<void> {
+/** Human-readable outcome of a trade response or admin decision. */
+export function describeResolution(id: number, action: 'accept' | 'reject' | 'approve' | 'deny', result: TradeResolution): string {
+  if (action === 'reject') return `❌ Trade #${id} rejected.`;
+  if (action === 'deny') return `⛔ Trade #${id} denied.`;
+  if (result.failure) return `⚠️ Trade #${id} could not be executed: ${result.failure}`;
+  if (result.executed) return `✅ Trade #${id} ${action === 'approve' ? 'approved and ' : 'accepted and '}executed.`;
+  if (result.awaitingAdmin) return `✅ Trade #${id} accepted; waiting for an admin to approve it.`;
+  return `Trade #${id} updated.`;
+}
+
+/** Posts a trade in the draft channel with action buttons and stores the message id. */
+export async function postTradeMessage(ctx: BotContext, draft: Draft, tradeId: number): Promise<void> {
   const config = ctx.service.repos.drafts.getConfig(draft.id);
+  const view = ctx.service.trades.view(draft.id, tradeId);
   const payload = {
     content: view.trade.status === 'proposed' ? `🤝 ${view.counterparty.users.map((u) => `<@${u.discordUserId}>`).join(' ')} — **${view.proposer.label}** proposed trade #${view.trade.id}.` : `🤝 Trade #${view.trade.id}`,
     embeds: [tradeEmbed(view)],
@@ -68,9 +79,14 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
     const give = service.trades.resolveAssetRefs(draft.id, proposer.id, splitRefs(interaction.options.getString('give', true)));
     const receive = service.trades.resolveAssetRefs(draft.id, counterparty.id, splitRefs(interaction.options.getString('receive', true)));
     await defer(interaction, true);
-    const view = await service.proposeTrade(draft.id, { proposerParticipantId: proposer.id, counterpartyParticipantId: counterparty.id, giveAssetIds: give, receiveAssetIds: receive, actor, note: interaction.options.getString('note') });
-    await postTradeMessage(ctx, draft, view);
-    await send(interaction, { content: view.trade.status === 'executed' ? `✅ Trade #${view.trade.id} executed.` : `📨 Trade #${view.trade.id} proposed. ${counterparty.label} can accept with the buttons in <#${draft.channelId}> or \`/trade accept id:${view.trade.id}\`.`, embeds: [tradeEmbed(view)] });
+    const { view, failure } = await service.proposeTrade(draft.id, { proposerParticipantId: proposer.id, counterpartyParticipantId: counterparty.id, giveAssetIds: give, receiveAssetIds: receive, actor, note: interaction.options.getString('note') });
+    await postTradeMessage(ctx, draft, view.trade.id);
+    const text = failure
+      ? `⚠️ Trade #${view.trade.id} could not be executed: ${failure}`
+      : view.trade.status === 'executed'
+        ? `✅ Trade #${view.trade.id} executed.`
+        : `📨 Trade #${view.trade.id} proposed. ${counterparty.label} can accept with the buttons in <#${draft.channelId}> or \`/trade accept id:${view.trade.id}\`.`;
+    await send(interaction, { content: text, embeds: [tradeEmbed(service.trades.view(draft.id, view.trade.id))] });
     return;
   }
   const id = interaction.options.getInteger('id', true);
@@ -78,8 +94,7 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
   if (sub === 'accept' || sub === 'reject') {
     const result = await service.respondTrade(draft.id, id, sub === 'accept', actor);
     await refreshTradeMessage(ctx, draft.id, id, config.tradeApproval);
-    const text = sub === 'reject' ? `❌ Trade #${id} rejected.` : result.executed ? `✅ Trade #${id} accepted and executed.` : result.awaitingAdmin ? `✅ Trade #${id} accepted; waiting for an admin to approve it.` : `Trade #${id} updated.`;
-    await send(interaction, { content: text, embeds: [tradeEmbed(result.view)] });
+    await send(interaction, { content: describeResolution(id, sub === 'reject' ? 'reject' : 'accept', result), embeds: [tradeEmbed(result.view)] });
     return;
   }
   if (sub === 'cancel') {

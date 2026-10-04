@@ -169,6 +169,35 @@ describe('trades', () => {
     expect(env.engine.getRoster(draftId, b.id).teams.map((t) => t.assetId)).toContain(bTeam.assetId);
   });
 
+  it('marks a trade failed (without rolling back) when execution-time validation fails', () => {
+    const { draftId, order } = twoPlayersWithTeams({ config: { allowFuturePickTrades: true } });
+    const [a, b] = [order[0]!, order[1]!];
+    const give = [env.engine.getRoster(draftId, a.id).teams[0]!.assetId];
+    const receive = env.trades.resolveAssetRefs(draftId, b.id, ['R3']);
+    const { view } = env.trades.propose(draftId, { proposerParticipantId: a.id, counterpartyParticipantId: b.id, giveAssetIds: give, receiveAssetIds: receive, actor: ADMIN });
+    // Future-pick trades get disabled between proposal and acceptance.
+    env.engine.updateConfig(draftId, { allowFuturePickTrades: false }, ADMIN);
+    const result = env.trades.respond(draftId, view.trade.id, true, user(b.users[0]!.discordUserId));
+    expect(result.executed).toBe(false);
+    expect(result.failure).toMatch(/future draft picks/);
+    expect(result.view.trade.status).toBe('failed');
+    expect(result.events.map((e) => e.type)).toEqual(['trade_failed']);
+    expect(env.repos.audit.listByType(draftId, 'trade_failed')).toHaveLength(1);
+    // Nothing moved.
+    expect(env.engine.getRoster(draftId, a.id).teams.map((t) => t.assetId)).toContain(give[0]);
+  });
+
+  it('only the counterparty seat may answer; admins cannot accept on behalf of a manned seat', () => {
+    const { draftId, order } = twoPlayersWithTeams();
+    const [a, b] = [order[0]!, order[1]!];
+    const give = [env.engine.getRoster(draftId, a.id).teams[0]!.assetId];
+    const receive = [env.engine.getRoster(draftId, b.id).teams[0]!.assetId];
+    const { view } = env.trades.propose(draftId, { proposerParticipantId: a.id, counterpartyParticipantId: b.id, giveAssetIds: give, receiveAssetIds: receive, actor: ADMIN });
+    expect(() => env.trades.respond(draftId, view.trade.id, true, ADMIN)).toThrow(/Only/);
+    expect(() => env.trades.respond(draftId, view.trade.id, true, user(a.users[0]!.discordUserId))).toThrow(/Only/);
+    expect(env.trades.respond(draftId, view.trade.id, true, user(b.users[0]!.discordUserId)).executed).toBe(true);
+  });
+
   it('refuses trades after completion unless allowed', () => {
     const { draftId, order } = setupDraft(env, { participants: 2, config: { rounds: 1 }, start: true });
     pickNextAvailable(env, draftId);

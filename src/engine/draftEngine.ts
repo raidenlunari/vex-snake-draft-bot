@@ -140,6 +140,16 @@ export class DraftEngine {
         throw new DraftError('INVALID_CONFIG', problems.join(' '));
       }
       this.repos.drafts.saveConfig(draftId, after, this.clock.nowIso());
+      const timerKeys: Array<keyof DraftConfig> = ['skipTimerSeconds', 'skipHoursStart', 'skipHoursEnd', 'timezone'];
+      if (ctx.draft.status === 'active' && ctx.draft.currentSlotId && ctx.draft.turnStartedAt && keys.some((k) => timerKeys.includes(k))) {
+        // Re-derive the running turn's deadline from its start time under the new rules.
+        this.repos.drafts.setTurn(draftId, {
+          currentSlotId: ctx.draft.currentSlotId,
+          turnToken: ctx.draft.turnToken,
+          turnStartedAt: ctx.draft.turnStartedAt,
+          turnDeadlineAt: this.deadlineFor(after, ctx.draft.turnStartedAt),
+        });
+      }
       const beforeSubset: Partial<DraftConfig> = {};
       const afterSubset: Partial<DraftConfig> = {};
       for (const k of keys) {

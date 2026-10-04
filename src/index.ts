@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { Events } from 'discord.js';
 import { loadEnv } from './config/env.js';
 import { openDatabase } from './db/connection.js';
 import { createRepositories } from './db/repositories/index.js';
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
     await registerCommands(env, logger);
   }
 
-  bootstrap.client.once('clientReady', async () => {
+  bootstrap.client.once(Events.ClientReady, async () => {
     logger.info({ user: bootstrap.client.user?.tag, guilds: bootstrap.client.guilds.cache.size }, 'discord client ready');
     try {
       await timers.recoverAll();

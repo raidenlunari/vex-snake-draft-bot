@@ -4,7 +4,7 @@ import type { CsvImporter, ImportMode, ImportSummary } from '../engine/csvImport
 import type { DraftEngine } from '../engine/draftEngine.js';
 import type { DraftEvent } from '../engine/events.js';
 import type { PrepickService } from '../engine/prepickService.js';
-import type { ProposeTradeInput, TradeEngine, TradeView } from '../engine/tradeEngine.js';
+import type { ProposeTradeInput, TradeEngine, TradeResolution, TradeView } from '../engine/tradeEngine.js';
 import type { Logger } from '../logging/logger.js';
 import type { Announcer } from './announcer.js';
 import { renderEvents } from './eventMessages.js';
@@ -139,37 +139,27 @@ export class DraftService {
 
   // --- trades ----------------------------------------------------------------
 
-  async proposeTrade(draftId: number, input: ProposeTradeInput): Promise<TradeView> {
+  async proposeTrade(draftId: number, input: ProposeTradeInput): Promise<{ view: TradeView; failure: string | null }> {
     return this.lock.run(this.key(draftId), async () => {
-      const { view, events } = this.trades.propose(draftId, input);
+      const { view, events, failure } = this.trades.propose(draftId, input);
       await this.announceEvents(draftId, events);
-      return view;
+      return { view, failure };
     });
   }
 
-  async respondTrade(draftId: number, tradeId: number, accept: boolean, actor: Actor): Promise<{ view: TradeView; executed: boolean; awaitingAdmin: boolean }> {
+  async respondTrade(draftId: number, tradeId: number, accept: boolean, actor: Actor): Promise<TradeResolution> {
     return this.lock.run(this.key(draftId), async () => {
-      try {
-        const result = this.trades.respond(draftId, tradeId, accept, actor);
-        await this.announceEvents(draftId, result.events);
-        return result;
-      } catch (err) {
-        await this.announceFailedTrade(draftId, tradeId);
-        throw err;
-      }
+      const result = this.trades.respond(draftId, tradeId, accept, actor);
+      await this.announceEvents(draftId, result.events);
+      return result;
     });
   }
 
-  async adminResolveTrade(draftId: number, tradeId: number, approve: boolean, actor: Actor): Promise<{ view: TradeView; executed: boolean }> {
+  async adminResolveTrade(draftId: number, tradeId: number, approve: boolean, actor: Actor): Promise<TradeResolution> {
     return this.lock.run(this.key(draftId), async () => {
-      try {
-        const result = this.trades.adminResolve(draftId, tradeId, approve, actor);
-        await this.announceEvents(draftId, result.events);
-        return result;
-      } catch (err) {
-        await this.announceFailedTrade(draftId, tradeId);
-        throw err;
-      }
+      const result = this.trades.adminResolve(draftId, tradeId, approve, actor);
+      await this.announceEvents(draftId, result.events);
+      return result;
     });
   }
 
@@ -214,13 +204,6 @@ export class DraftService {
       } catch (err) {
         this.logger.error({ err, draftId }, 'failed to announce draft event');
       }
-    }
-  }
-
-  private async announceFailedTrade(draftId: number, tradeId: number): Promise<void> {
-    const trade = this.repos.trades.getById(tradeId);
-    if (trade?.status === 'failed') {
-      await this.announceEvents(draftId, [{ type: 'trade_failed', draftId, trade, reason: trade.resolutionNote ?? 'validation failed' }]);
     }
   }
 }

@@ -30,6 +30,15 @@ export interface ProposeTradeInput {
 
 export const MAX_ASSETS_PER_SIDE = 3;
 
+export interface TradeResolution {
+  view: TradeView;
+  events: DraftEvent[];
+  executed: boolean;
+  awaitingAdmin: boolean;
+  /** Set when execution was attempted and failed validation; the trade is then `failed`. */
+  failure: string | null;
+}
+
 /**
  * Trades move ownership of draft assets (team instances and future picks) between
  * participants. Validation runs at proposal time and again, inside the same
@@ -41,7 +50,7 @@ export class TradeEngine {
     private readonly clock: Clock,
   ) {}
 
-  propose(draftId: number, input: ProposeTradeInput): { view: TradeView; events: DraftEvent[] } {
+  propose(draftId: number, input: ProposeTradeInput): { view: TradeView; events: DraftEvent[]; failure: string | null } {
     return inTransaction(this.repos.db, () => {
       const ctx = loadContext(this.repos, draftId);
       this.assertTradingOpen(ctx);
@@ -77,21 +86,27 @@ export class TradeEngine {
         now,
       });
       const events: DraftEvent[] = [];
+      let failure: string | null = null;
       if (autoExecute) {
-        this.execute(ctx, this.repos.trades.getById(trade.id) as Trade, input.actor, events);
+        failure = this.execute(ctx, this.repos.trades.getById(trade.id) as Trade, input.actor, events);
       }
-      return { view: this.view(draftId, trade.id), events };
+      return { view: this.view(draftId, trade.id), events, failure };
     });
   }
 
-  /** Counterparty accepts or rejects. */
-  respond(draftId: number, tradeId: number, accept: boolean, actor: Actor): { view: TradeView; events: DraftEvent[]; executed: boolean; awaitingAdmin: boolean } {
+  /**
+   * Counterparty accepts or rejects. Only a member of the counterparty seat may answer;
+   * an admin may answer on behalf of a seat that has no Discord users at all.
+   */
+  respond(draftId: number, tradeId: number, accept: boolean, actor: Actor): TradeResolution {
     return inTransaction(this.repos.db, () => {
       const ctx = loadContext(this.repos, draftId);
       const trade = this.requireTrade(ctx, tradeId);
       if (trade.status !== 'proposed') throw new DraftError('TRADE_ERROR', `Trade #${tradeId} is ${trade.status} and can no longer be answered.`);
       const counterparty = this.requireParticipant(ctx, trade.counterpartyParticipantId);
-      if (actor.kind === 'user' && !this.repos.participants.isMember(counterparty.id, actor.id)) {
+      const isMember = this.repos.participants.isMember(counterparty.id, actor.id);
+      const adminForUnmannedSeat = actor.kind === 'admin' && counterparty.users.length === 0;
+      if (actor.kind !== 'system' && !isMember && !adminForUnmannedSeat) {
         throw new DraftError('PERMISSION_DENIED', `Only "${counterparty.label}" can answer this trade.`);
       }
       const now = this.clock.nowIso();
@@ -99,21 +114,21 @@ export class TradeEngine {
       if (!accept) {
         this.repos.trades.setStatus(tradeId, 'rejected', { respondedAt: now, respondedBy: actor.id, resolvedAt: now, resolvedBy: actor.id });
         this.repos.audit.record({ guildId: ctx.draft.guildId, draftId, eventType: 'trade_rejected', actor, summary: `Trade #${tradeId} rejected by "${counterparty.label}"`, subject: { tradeId }, now });
-        return { view: this.view(draftId, tradeId), events, executed: false, awaitingAdmin: false };
+        return { view: this.view(draftId, tradeId), events, executed: false, awaitingAdmin: false, failure: null };
       }
       this.assertTradingOpen(ctx);
       this.repos.trades.setStatus(tradeId, 'accepted', { respondedAt: now, respondedBy: actor.id });
       this.repos.audit.record({ guildId: ctx.draft.guildId, draftId, eventType: 'trade_accepted', actor, summary: `Trade #${tradeId} accepted by "${counterparty.label}"`, subject: { tradeId }, now });
       if (ctx.config.tradeApproval === 'admin') {
-        return { view: this.view(draftId, tradeId), events, executed: false, awaitingAdmin: true };
+        return { view: this.view(draftId, tradeId), events, executed: false, awaitingAdmin: true, failure: null };
       }
-      const executed = this.execute(ctx, this.repos.trades.getById(tradeId) as Trade, actor, events);
-      return { view: this.view(draftId, tradeId), events, executed, awaitingAdmin: false };
+      const failure = this.execute(ctx, this.repos.trades.getById(tradeId) as Trade, actor, events);
+      return { view: this.view(draftId, tradeId), events, executed: failure === null, awaitingAdmin: false, failure };
     });
   }
 
   /** Admin approves (executes) or denies an accepted trade. */
-  adminResolve(draftId: number, tradeId: number, approve: boolean, actor: Actor): { view: TradeView; events: DraftEvent[]; executed: boolean } {
+  adminResolve(draftId: number, tradeId: number, approve: boolean, actor: Actor): TradeResolution {
     return inTransaction(this.repos.db, () => {
       const ctx = loadContext(this.repos, draftId);
       const trade = this.requireTrade(ctx, tradeId);
@@ -125,12 +140,12 @@ export class TradeEngine {
       if (!approve) {
         this.repos.trades.setStatus(tradeId, 'denied', { resolvedAt: now, resolvedBy: actor.id });
         this.repos.audit.record({ guildId: ctx.draft.guildId, draftId, eventType: 'trade_denied', actor, summary: `Trade #${tradeId} denied by an admin`, subject: { tradeId }, now });
-        return { view: this.view(draftId, tradeId), events, executed: false };
+        return { view: this.view(draftId, tradeId), events, executed: false, awaitingAdmin: false, failure: null };
       }
       if (trade.status !== 'accepted') throw new DraftError('TRADE_ERROR', `Trade #${tradeId} has not been accepted by the other side yet.`);
       this.assertTradingOpen(ctx);
-      const executed = this.execute(ctx, trade, actor, events);
-      return { view: this.view(draftId, tradeId), events, executed };
+      const failure = this.execute(ctx, trade, actor, events);
+      return { view: this.view(draftId, tradeId), events, executed: failure === null, awaitingAdmin: false, failure };
     });
   }
 
@@ -242,7 +257,11 @@ export class TradeEngine {
 
   // ---------------------------------------------------------------------------
 
-  private execute(ctx: DraftContext, trade: Trade, actor: Actor, events: DraftEvent[]): boolean {
+  /**
+   * Moves the assets. Returns null on success or the validation failure reason; in that
+   * case the trade is marked `failed` (and that write is kept because nothing throws).
+   */
+  private execute(ctx: DraftContext, trade: Trade, actor: Actor, events: DraftEvent[]): string | null {
     const now = this.clock.nowIso();
     const proposer = this.requireParticipant(ctx, trade.proposerParticipantId);
     const counterparty = this.requireParticipant(ctx, trade.counterpartyParticipantId);
@@ -256,7 +275,7 @@ export class TradeEngine {
       this.repos.trades.setStatus(trade.id, 'failed', { resolvedAt: now, resolvedBy: actor.id, resolutionNote: reason });
       this.repos.audit.record({ guildId: ctx.draft.guildId, draftId: ctx.draft.id, eventType: 'trade_failed', actor, summary: `Trade #${trade.id} failed validation at execution: ${reason}`, subject: { tradeId: trade.id }, now });
       events.push({ type: 'trade_failed', draftId: ctx.draft.id, trade: this.repos.trades.getById(trade.id) as Trade, reason });
-      throw new DraftError('TRADE_ERROR', `Trade #${trade.id} can no longer be executed: ${reason}`);
+      return reason;
     }
     const before = [...gives, ...receives].map((a) => ({ assetId: a.id, owner: a.currentParticipantId }));
     for (const a of gives) {
@@ -288,7 +307,7 @@ export class TradeEngine {
       now,
     });
     events.push({ type: 'trade_executed', draftId: ctx.draft.id, trade: this.repos.trades.getById(trade.id) as Trade, summary });
-    return true;
+    return null;
   }
 
   private validate(ctx: DraftContext, proposer: ParticipantWithUsers, counterparty: ParticipantWithUsers, gives: DraftAsset[], receives: DraftAsset[], tradeId?: number): void {

@@ -26,6 +26,7 @@ import {
 import { defer, send, sendText } from '../respond.js';
 import { auditEmbed, configEmbed, importSummaryEmbed, orderEmbed, participantsEmbed, seatName, teamEmbed, tradeEmbed, tradeButtons, tradeMentions } from '../views/index.js';
 import { fetchAttachmentText } from '../util/attachments.js';
+import { describeResolution } from './trade.js';
 
 const onOff = (b: boolean): string => (b ? 'enabled' : 'disabled');
 
@@ -342,12 +343,12 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
     }
     const chosen = interaction.options.getChannel('channel') ?? interaction.channel;
     if (!chosen || !('type' in chosen)) throw new DraftError('VALIDATION', 'Pick a channel, thread or forum post.');
+    await defer(interaction);
     let target = chosen as GuildTextBasedChannel | { type: ChannelType; id: string; name: string };
     if (target.type === ChannelType.GuildForum || target.type === ChannelType.GuildMedia) {
       const forum = await interaction.guild.channels.fetch(target.id);
       if (!forum || forum.type !== ChannelType.GuildForum) throw new DraftError('VALIDATION', 'That forum could not be loaded.');
       const title = interaction.options.getString('post-title') ?? draft.name;
-      await defer(interaction);
       const post = await forum.threads.create({
         name: title.slice(0, 100),
         autoArchiveDuration: 10080,
@@ -388,8 +389,16 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
         await sendText(interaction, `✅ Added <@${target.id}> to seat **${updated.label}** (${updated.users.length} user(s)).`);
         return;
       }
+      await defer(interaction);
       const member = await interaction.guild.members.fetch(target.id).catch(() => null);
-      const label = interaction.options.getString('label') ?? member?.displayName ?? target.username;
+      const requested = interaction.options.getString('label');
+      let label = requested ?? member?.displayName ?? target.username;
+      if (!requested) {
+        // Auto-suffix display-name collisions so two "Alex"es can both join.
+        let n = 2;
+        const base = label;
+        while (repos.participants.getByLabel(draft.id, label)) label = `${base} (${n++})`;
+      }
       const created = service.engine.addParticipant(draft.id, { label, discordUserId: target.id, actor });
       const count = repos.participants.listByDraft(draft.id).length;
       await sendText(interaction, `✅ Added **${created.label}** (<@${target.id}>). ${count} participant(s) registered.${draft.status === 'randomized' ? ' The order was cleared; run `/draft randomize` again.' : ''}`);
@@ -646,7 +655,7 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
     const id = interaction.options.getInteger('id', true);
     await defer(interaction);
     const result = await service.adminResolveTrade(draft.id, id, sub === 'approve', actor);
-    await send(interaction, { content: sub === 'approve' ? (result.executed ? `✅ Trade #${id} approved and executed.` : `Trade #${id} updated.`) : `⛔ Trade #${id} denied.`, embeds: [tradeEmbed(result.view)] });
+    await send(interaction, { content: describeResolution(id, sub === 'approve' ? 'approve' : 'deny', result), embeds: [tradeEmbed(result.view)] });
     await refreshTradeMessage(ctx, draft.id, id, config.tradeApproval);
     return;
   }
