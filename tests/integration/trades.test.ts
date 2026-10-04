@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ADMIN, createTestEnv, pickNextAvailable, setupDraft, teamByNumber, user, type TestEnv } from '../helpers/env.js';
+import { ADMIN, createTestEnv, pickNextAvailable, setupDraft, user, type TestEnv } from '../helpers/env.js';
 
 describe('trades', () => {
   let env: TestEnv;

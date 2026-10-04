@@ -9,19 +9,36 @@ export interface EmbedPayload {
   footer?: string;
 }
 
+export interface ButtonSpec {
+  id: string;
+  label: string;
+  style?: 'primary' | 'secondary' | 'success' | 'danger';
+  emoji?: string;
+}
+
 export interface AnnouncementPayload {
   content?: string;
   embeds?: EmbedPayload[];
+  buttons?: ButtonSpec[];
   /** Discord user ids allowed to be pinged by this message. */
   mentionUserIds?: string[];
 }
 
+export interface AnnouncementRef {
+  channelId: string;
+  messageId: string;
+}
+
 export interface Announcer {
-  announce(draft: Draft, payload: AnnouncementPayload): Promise<void>;
+  announce(draft: Draft, payload: AnnouncementPayload): Promise<AnnouncementRef | null>;
+  update(ref: AnnouncementRef, payload: AnnouncementPayload): Promise<void>;
 }
 
 export class NoopAnnouncer implements Announcer {
-  async announce(): Promise<void> {
+  async announce(): Promise<AnnouncementRef | null> {
+    return null;
+  }
+  async update(): Promise<void> {
     /* intentionally empty */
   }
 }
@@ -29,8 +46,13 @@ export class NoopAnnouncer implements Announcer {
 /** Test double that records everything it would have sent. */
 export class RecordingAnnouncer implements Announcer {
   public readonly sent: Array<{ draftId: number; payload: AnnouncementPayload }> = [];
-  async announce(draft: Draft, payload: AnnouncementPayload): Promise<void> {
+  public readonly updates: Array<{ ref: AnnouncementRef; payload: AnnouncementPayload }> = [];
+  async announce(draft: Draft, payload: AnnouncementPayload): Promise<AnnouncementRef | null> {
     this.sent.push({ draftId: draft.id, payload });
+    return { channelId: draft.channelId ?? 'none', messageId: `msg-${this.sent.length}` };
+  }
+  async update(ref: AnnouncementRef, payload: AnnouncementPayload): Promise<void> {
+    this.updates.push({ ref, payload });
   }
 }
 

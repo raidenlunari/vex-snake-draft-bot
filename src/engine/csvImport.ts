@@ -71,7 +71,7 @@ function clean(value: unknown): string | null {
  */
 export function parseTeamsCsv(text: string): ParseResult {
   if (Buffer.byteLength(text, 'utf8') > MAX_CSV_BYTES) throw new DraftError('VALIDATION', 'The CSV is larger than 2 MB.');
-  const content = text.replace(/^﻿/, '');
+  const content = text.replace(/^\uFEFF/, '');
   let records: string[][];
   try {
     records = parse(content, { relax_column_count: true, skip_empty_lines: true, trim: true, bom: true, relax_quotes: true }) as string[][];

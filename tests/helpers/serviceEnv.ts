@@ -58,15 +58,16 @@ export function createServiceEnv(dbPath = ':memory:', clock = new FakeClock()): 
   const engine = new DraftEngine({ repos, clock, random: new SeededRandom(3) });
   const scheduler = new FakeScheduler(clock);
   const announcer = new RecordingAnnouncer();
-  let service!: DraftService;
-  const timers = new TurnTimerService({
+  const timers: TurnTimerService = new TurnTimerService({
     repos,
     clock,
     logger: silentLogger,
     scheduler,
-    onExpire: (draftId, token) => service.handleTimerExpiry(draftId, token).then(() => undefined),
+    onExpire: async (draftId, token): Promise<void> => {
+      await service.handleTimerExpiry(draftId, token);
+    },
   });
-  service = new DraftService({
+  const service: DraftService = new DraftService({
     repos,
     engine,
     trades: new TradeEngine(repos, clock),
