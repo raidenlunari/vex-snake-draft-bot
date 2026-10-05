@@ -2,6 +2,7 @@ import type { Repositories } from '../db/repositories/index.js';
 import type { Draft, ParticipantWithUsers } from '../domain/types.js';
 import type { DraftEngine } from '../engine/draftEngine.js';
 import type { SheetsClient } from '../integrations/googleSheets.js';
+import { detectLayout, planLayoutFill } from './sheetLayout.js';
 import type { Logger } from '../logging/logger.js';
 
 const AVAILABLE_COLUMNS = 7;
@@ -97,6 +98,8 @@ export class SheetSyncService {
   private readonly logger: Logger;
   private readonly debounceMs: number;
   public lastError = new Map<number, string>();
+  /** Seats that had no matching row in the user's sheet and were appended. */
+  public lastUnmatched = new Map<number, string[]>();
 
   constructor(opts: SheetSyncOptions) {
     this.client = opts.client;
@@ -154,11 +157,32 @@ export class SheetSyncService {
   private async write(draftId: number): Promise<void> {
     const draft = this.repos.drafts.getById(draftId);
     if (!draft?.sheetSpreadsheetId || !this.client) return;
-    const values = renderDraftSheet(this.engine, this.repos, draftId);
+    const tab = draft.sheetTab ?? 'Draft';
     try {
-      await this.client.writeTab(draft.sheetSpreadsheetId, draft.sheetTab ?? 'Draft', values);
+      const existing = await this.client.readTab(draft.sheetSpreadsheetId, tab);
+      if (detectLayout(existing)) {
+        // The user's own layout: fill the Drafter/Pick columns and the Available Teams block in place.
+        const state = this.engine.getState(draftId);
+        const plan = planLayoutFill({
+          existing,
+          drafters: state.grid.map((g) => ({ label: g.participant.label, picks: g.picks })),
+          availableTeams: this.repos.teams.listAvailable(draftId, state.config.maxInstancesPerTeam, undefined, 10000).map((t) => t.teamNumber),
+          picksPerSeat: state.config.rounds * state.config.picksPerRound,
+          notes: [
+            ['Picks per team', String(state.config.rounds * state.config.picksPerRound)],
+            ['Status', state.draft.status === 'active' && state.currentSlot ? `Round ${state.currentSlot.round} · Pick #${state.currentSlot.overallPick} · ${state.currentOwner?.label ?? ''} is up` : state.draft.status],
+          ],
+        });
+        await this.client.updateRanges(draft.sheetSpreadsheetId, tab, plan.writes, plan.clears);
+        this.lastUnmatched.set(draftId, plan.unmatched);
+        this.logger.debug({ draftId, writes: plan.writes.length, unmatched: plan.unmatched }, 'sheet filled in place');
+      } else {
+        const values = renderDraftSheet(this.engine, this.repos, draftId);
+        await this.client.writeTab(draft.sheetSpreadsheetId, tab, values);
+        this.lastUnmatched.delete(draftId);
+        this.logger.debug({ draftId, rows: values.length }, 'sheet rewritten');
+      }
       this.lastError.delete(draftId);
-      this.logger.debug({ draftId, rows: values.length }, 'sheet synced');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.lastError.set(draftId, message);

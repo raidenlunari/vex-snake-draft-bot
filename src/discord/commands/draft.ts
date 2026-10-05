@@ -434,7 +434,8 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
     const sheets = service.sheets;
     if (sub === 'view') {
       const err = sheets?.lastError.get(draft.id);
-      await sendText(interaction, `📊 Sheet: ${describeSheet(draft)}${sheets?.enabled ? '' : '\n⚠️ The bot has no Google service account configured (GOOGLE_SERVICE_ACCOUNT_FILE), so nothing is written.'}${err ? `\n⚠️ Last sync error: ${err}` : ''}`, { ephemeral: true });
+      const unmatched = sheets?.lastUnmatched.get(draft.id) ?? [];
+      await sendText(interaction, `📊 Sheet: ${describeSheet(draft)}${sheets?.enabled ? '' : '\n⚠️ The bot has no Google service account configured (GOOGLE_SERVICE_ACCOUNT_FILE), so nothing is written.'}${err ? `\n⚠️ Last sync error: ${err}` : ''}${unmatched.length ? `\nℹ️ Seats with no matching row in the sheet (added at the bottom): ${unmatched.join(', ')}. Rename the sheet row or the seat so they match.` : ''}`, { ephemeral: true });
       return;
     }
     if (sub === 'clear') {
@@ -458,7 +459,11 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
       }
       service.engine.setSheet(draft.id, { spreadsheetId, tab }, actor);
       await sheets.syncNow(draft.id);
-      await sendText(interaction, `✅ Mirroring to **${title}** → tab **${tab}**. The sheet updates after every pick, skip, trade and admin change.\n${describeSheet(service.repos.drafts.getById(draft.id)!)}`);
+      const unmatched = sheets.lastUnmatched.get(draft.id) ?? [];
+      await sendText(
+        interaction,
+        `✅ Mirroring to **${title}** → tab **${tab}**. ${unmatched.length === 0 && sheets.lastUnmatched.has(draft.id) ? 'Found your Drafter / Pick layout and filled it in place.' : sheets.lastUnmatched.has(draft.id) ? `Filled your layout; these seats had no matching row and were added at the bottom: ${unmatched.join(', ')}.` : 'No "Drafter" header found, so the bot wrote its own grid on that tab.'} The sheet updates after every pick, skip, trade and admin change.\n${describeSheet(service.repos.drafts.getById(draft.id)!)}`,
+      );
       return;
     }
     if (sub === 'sync') {

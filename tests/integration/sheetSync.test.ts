@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SheetsClient } from '../../src/integrations/googleSheets.js';
+import type { RangeValues, SheetsClient } from '../../src/integrations/googleSheets.js';
 import { parseSpreadsheetId, tabRange } from '../../src/integrations/googleSheets.js';
 import { silentLogger } from '../../src/logging/logger.js';
 import { renderDraftSheet, SheetSyncService } from '../../src/services/sheetSync.js';
@@ -15,6 +15,15 @@ class FakeSheets implements SheetsClient {
   }
   async describe(): Promise<{ title: string; tabs: string[] }> {
     return { title: 'Smoky Mountain', tabs: ['Draft'] };
+  }
+  existing: string[][] = [];
+  ranges: Array<{ writes: RangeValues[]; clears: string[] }> = [];
+  async readTab(): Promise<string[][]> {
+    return this.existing;
+  }
+  async updateRanges(_id: string, _tab: string, writes: RangeValues[], clears: string[]): Promise<void> {
+    if (this.fail) throw new Error('boom');
+    this.ranges.push({ writes, clears });
   }
 }
 
@@ -60,6 +69,22 @@ describe('Google Sheets mirror', () => {
     expect(sync.lastError.get(draftId)).toBe('boom');
     expect(env.repos.audit.listByType(draftId, 'sheet_changed')).toHaveLength(1);
     sync.stop();
+  });
+
+  it('fills a user layout in place when the tab has a Drafter header', async () => {
+    const env = createTestEnv();
+    const { draftId, order } = setupDraft(env, { participants: 2, teams: 5, config: { rounds: 1 }, start: true });
+    pickNextAvailable(env, draftId);
+    const fake = new FakeSheets();
+    fake.existing = [['Drafter', 'Pick 1'], [order[0]!.label], [order[1]!.label], [], ['Available Teams']];
+    const sync = new SheetSyncService({ client: fake, repos: env.repos, engine: env.engine, logger: silentLogger, debounceMs: 5 });
+    env.engine.setSheet(draftId, { spreadsheetId: 'abc', tab: 'Sheet1' }, ADMIN);
+    await sync.syncNow(draftId);
+    expect(fake.writes).toHaveLength(0); // no full rewrite
+    const plan = fake.ranges[0]!;
+    expect(plan.writes.find((w) => w.range === 'B2:B2')?.values).toEqual([['1001A']]);
+    expect(plan.writes.find((w) => w.range === 'A6:G6')?.values[0]).toEqual(['1002A', '1003A', '1004A', '1005A', '', '', '']);
+    expect(sync.lastUnmatched.get(draftId)).toEqual([]);
   });
 
   it('parses spreadsheet ids and quotes tab names', () => {

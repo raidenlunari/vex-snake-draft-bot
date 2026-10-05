@@ -183,7 +183,12 @@ The bot can keep a Google Sheet tab in sync with the draft (one row per drafter 
    `/draft sheet sync` to force a rewrite and `/draft sheet view` to see the link and the
    last error, if any.
 
-The bot rewrites the whole tab on every change, so keep your own notes on other tabs.
+If the tab already has your own layout — a cell containing **Drafter** with **Pick 1**,
+**Pick 2**, … to its right and the drafters' names below it, plus optionally a cell
+**Available Teams** with empty space under it — the bot fills those cells in place and
+leaves your formatting, colours and notes alone. Drafter rows are matched to seat labels
+(case-insensitive); unmatched seats are appended below the block and listed by
+`/draft sheet view`. Without a Drafter header the bot writes its own grid from A1.
 
 ## Troubleshooting
 
