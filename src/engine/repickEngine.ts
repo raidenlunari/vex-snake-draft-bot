@@ -5,6 +5,7 @@ import type { Actor, ParticipantWithUsers, PickSlot, Repick, Team } from '../dom
 import type { Clock } from '../util/clock.js';
 import { loadContext, requireStatus, type DraftContext } from './context.js';
 import type { DraftEvent } from './events.js';
+import { instanceLimit } from './draftEngine.js';
 
 export interface RepickView {
   repick: Repick;
@@ -212,7 +213,7 @@ export class RepickEngine {
     const team = this.requireTeam(ctx, id);
     if (team.removedAt) throw new DraftError('TEAM_REMOVED', `Team ${team.teamNumber} has been removed from this draft.`);
     const used = this.repos.assets.listActiveForTeam(id);
-    if (used.length >= ctx.config.maxInstancesPerTeam) {
+    if (used.length >= instanceLimit(team, ctx.config)) {
       const owner = used[0] ? this.repos.participants.getById(used[0].currentParticipantId) : null;
       throw new DraftError('TEAM_UNAVAILABLE', `Team ${team.teamNumber} is no longer available${owner ? ` (on ${owner.label}'s roster)` : ''}.`);
     }

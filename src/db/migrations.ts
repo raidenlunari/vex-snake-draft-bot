@@ -259,6 +259,11 @@ CREATE TABLE repicks (
 CREATE INDEX repicks_draft_status ON repicks(draft_id, status);
 `,
   },
+  {
+    id: 4,
+    name: 'per-team instance limit',
+    sql: `ALTER TABLE teams ADD COLUMN max_instances INTEGER;`,
+  },
 ];
 
 export function runMigrations(db: Database): number {

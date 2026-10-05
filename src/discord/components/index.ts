@@ -7,6 +7,8 @@ import { defer, send, updateMessage } from '../respond.js';
 import { fullOrderEmbed, orderEmbed, prepicksEmbed, repickEmbed, rosterEmbed, allRostersEmbed, seatName, statusButtons, statusEmbed, tradeEmbed } from '../views/index.js';
 import { refreshTradeMessage } from '../commands/draft.js';
 import { describeResolution } from '../commands/trade.js';
+import { availableTeamsPayload } from '../commands/teams.js';
+import type { TeamsMode } from '../views/teams.js';
 
 type Interaction = MessageComponentInteraction<'cached'> | ModalSubmitInteraction<'cached'>;
 
@@ -214,7 +216,21 @@ const repickHandler: ComponentHandler = {
   },
 };
 
-export const componentHandlers: ComponentHandler[] = [pickHandler, startHandler, completeHandler, resetHandler, tradeHandler, viewHandler, repickHandler];
+const teamsHandler: ComponentHandler = {
+  namespace: 'teams',
+  async execute(interaction, args, ctx) {
+    const draftId = requireDraftId(ctx, interaction, args[1]);
+    const draft = ctx.service.repos.drafts.getById(draftId)!;
+    const page = num(args[2], 'page');
+    const mode: TeamsMode = args[3] === 'names' ? 'names' : 'grid';
+    const payload = availableTeamsPayload(ctx, draft, page, mode, null);
+    // From the status message, open a fresh ephemeral view; from a /teams message, page in place.
+    if (isComponent(interaction) && interaction.message.embeds[0]?.title?.startsWith('🤖')) await updateMessage(interaction, payload);
+    else await send(interaction, payload, { ephemeral: true });
+  },
+};
+
+export const componentHandlers: ComponentHandler[] = [pickHandler, startHandler, completeHandler, resetHandler, tradeHandler, viewHandler, repickHandler, teamsHandler];
 
 /** Small helper used by status replies elsewhere. */
 export function describeTurn(ctx: BotContext, draftId: number): string {

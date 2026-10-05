@@ -6,6 +6,7 @@ import { repickCommand } from './repick.js';
 import { rosterCommand } from './roster.js';
 import { statusCommand } from './status.js';
 import { teamCommand } from './team.js';
+import { teamsCommand } from './teams.js';
 import { tradeCommand } from './trade.js';
 
-export const commands: Command[] = [draftCommand, statusCommand, pickCommand, prepicksCommand, repickCommand, rosterCommand, teamCommand, tradeCommand];
+export const commands: Command[] = [draftCommand, statusCommand, pickCommand, prepicksCommand, repickCommand, rosterCommand, teamCommand, teamsCommand, tradeCommand];

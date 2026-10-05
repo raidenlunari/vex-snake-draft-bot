@@ -643,6 +643,19 @@ export class DraftEngine {
     });
   }
 
+  /** Admin: how many copies of this specific team may be drafted (null = draft default). */
+  setTeamLimit(draftId: number, teamId: number, limit: number | null, actor: Actor): Team {
+    return this.tx(() => {
+      const ctx = loadContext(this.repos, draftId);
+      const team = this.requireTeam(ctx, teamId);
+      if (limit !== null && (!Number.isInteger(limit) || limit < 1 || limit > 50)) throw new DraftError('VALIDATION', 'The limit must be between 1 and 50, or 0 for the draft default.');
+      const now = this.clock.nowIso();
+      this.repos.teams.setMaxInstances(teamId, limit, now);
+      this.audit(ctx.draft.guildId, draftId, 'team_limit_changed', actor, `Team ${team.teamNumber} may be drafted ${limit === null ? `${ctx.config.maxInstancesPerTeam} time(s) (draft default)` : `${limit} time(s)`}`, { teamId }, { maxInstances: team.maxInstances }, { maxInstances: limit });
+      return this.repos.teams.getById(teamId) as Team;
+    });
+  }
+
   restoreTeam(draftId: number, teamId: number, actor: Actor): Team {
     return this.tx(() => {
       const ctx = loadContext(this.repos, draftId);
@@ -793,9 +806,9 @@ export class DraftEngine {
     return {
       team,
       removed: team.removedAt !== null,
-      available: team.removedAt === null && owners.length < ctx.config.maxInstancesPerTeam,
+      available: team.removedAt === null && owners.length < instanceLimit(team, ctx.config),
       instancesUsed: owners.length,
-      maxInstances: ctx.config.maxInstancesPerTeam,
+      maxInstances: instanceLimit(team, ctx.config),
       owners,
     };
   }
@@ -861,7 +874,8 @@ export class DraftEngine {
     const team = this.requireTeam(ctx, teamId);
     if (team.removedAt) throw new DraftError('TEAM_REMOVED', `Team ${team.teamNumber} has been removed from this draft.`);
     const used = this.repos.assets.listActiveForTeam(teamId);
-    if (used.length >= ctx.config.maxInstancesPerTeam) {
+    const limit = instanceLimit(team, ctx.config);
+    if (used.length >= limit) {
       const first = used[0];
       const owner = first ? this.repos.participants.getWithUsers(first.currentParticipantId) : null;
       const where = first?.overallPick ? ` at overall pick #${first.overallPick}` : '';
@@ -869,7 +883,7 @@ export class DraftEngine {
         'TEAM_UNAVAILABLE',
         used.length === 1 && owner
           ? `Team ${team.teamNumber} is no longer available. It was selected by ${mentionSeat(owner)}${where}.`
-          : `Team ${team.teamNumber} is no longer available (all ${ctx.config.maxInstancesPerTeam} copies are taken).`,
+          : `Team ${team.teamNumber} is no longer available (all ${limit} copies are taken).`,
         { teamId, ownerIds: used.map((u) => u.currentParticipantId) },
       );
     }
@@ -997,7 +1011,7 @@ export class DraftEngine {
     const owner = this.repos.participants.getWithUsers(ownerId) as ParticipantWithUsers;
     for (const prepick of this.repos.prepicks.list(ownerId)) {
       const team = this.repos.teams.getById(prepick.teamId);
-      const available = team && !team.removedAt && this.repos.assets.listActiveForTeam(team.id).length < ctx.config.maxInstancesPerTeam;
+      const available = team && !team.removedAt && this.repos.assets.listActiveForTeam(team.id).length < instanceLimit(team, ctx.config);
       if (!team || !available) {
         this.repos.prepicks.remove(prepick.id);
         if (team) {
@@ -1092,6 +1106,11 @@ export class DraftEngine {
     });
     events.push({ type: 'draft_completed', draftId: ctx.draft.id, forfeited, reason });
   }
+}
+
+/** Copies of a team that may be drafted: the team's own override, else the draft setting. */
+export function instanceLimit(team: Team, config: DraftConfig): number {
+  return team.maxInstances ?? config.maxInstancesPerTeam;
 }
 
 export function normalizeTeamNumber(raw: string): string {

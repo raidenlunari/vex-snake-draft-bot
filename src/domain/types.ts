@@ -101,6 +101,8 @@ export interface Team {
   organization: string | null;
   location: string | null;
   extra: Record<string, string> | null;
+  /** Per-team override of how many copies may be drafted; null = draft default. */
+  maxInstances: number | null;
   removedAt: string | null;
   createdAt: string;
   updatedAt: string;

@@ -199,6 +199,13 @@ const data = new SlashCommandBuilder()
           .addBooleanOption((o) => o.setName('force').setDescription('Also drop it from any roster it is on')),
       )
       .addSubcommand((s) => s.setName('restore').setDescription('Return a removed team to the pool').addStringOption((o) => o.setName('team').setDescription('Team number').setRequired(true).setAutocomplete(true)))
+      .addSubcommand((s) =>
+        s
+          .setName('limit')
+          .setDescription('How many times this specific team can be picked (overrides the draft setting)')
+          .addStringOption((o) => o.setName('team').setDescription('Team number').setRequired(true).setAutocomplete(true))
+          .addIntegerOption((o) => o.setName('times').setDescription('1-50, or 0 to use the draft default').setRequired(true).setMinValue(0).setMaxValue(50)),
+      )
       .addSubcommand((s) => s.setName('list').setDescription('List teams in the pool').addStringOption((o) => o.setName('filter').setDescription('Only show matching numbers/names')).addBooleanOption((o) => o.setName('available-only').setDescription('Hide drafted teams'))),
   )
   .addSubcommandGroup((g) =>
@@ -696,6 +703,15 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
       await sendText(interaction, `✅ **${team.teamNumber}** is back in the pool.`);
       return;
     }
+    if (sub === 'limit') {
+      const team = teamOrThrow(ctx, draft.id, interaction.options.getString('team', true));
+      const times = interaction.options.getInteger('times', true);
+      const updated = service.engine.setTeamLimit(draft.id, team.id, times === 0 ? null : times, actor);
+      service.touch(draft.id);
+      const config = repos.drafts.getConfig(draft.id);
+      await sendText(interaction, `✅ **${updated.teamNumber}** can be picked ${updated.maxInstances ?? config.maxInstancesPerTeam} time(s)${updated.maxInstances === null ? ' (draft default)' : ''}.`);
+      return;
+    }
     if (sub === 'list') {
       const filter = (interaction.options.getString('filter') ?? '').toUpperCase();
       const availableOnly = interaction.options.getBoolean('available-only') ?? false;
@@ -802,7 +818,7 @@ async function autocomplete(interaction: AutocompleteInteraction<'cached'>, ctx:
   }
   if (focused.name === 'team' || focused.name === 'new-team' || focused.name === 'old-team') {
     if (group === 'team' && sub === 'restore') return respondAutocomplete(interaction, teamChoices(ctx, draft, q, 'removed'));
-    if (group === 'team' && sub === 'remove') return respondAutocomplete(interaction, teamChoices(ctx, draft, q, 'all'));
+    if (group === 'team' && (sub === 'remove' || sub === 'limit')) return respondAutocomplete(interaction, teamChoices(ctx, draft, q, 'all'));
     if ((group === 'roster' && (sub === 'drop' || sub === 'move')) || (group === 'repick' && sub === 'start') || focused.name === 'old-team') {
       const ref = interaction.options.getString(sub === 'move' ? 'from' : 'participant');
       if (ref) {

@@ -452,3 +452,23 @@ describe('team seats (several users on one participant)', () => {
     expect(env.prepicks.list(d.id, team.id)).toHaveLength(1);
   });
 });
+
+describe('per-team pick limits', () => {
+  it('a team override beats the draft-wide copy limit', () => {
+    const env = createTestEnv();
+    const { draftId, order } = setupDraft(env, { participants: 3, teams: 5, config: { rounds: 1, maxInstancesPerTeam: 1 }, start: true });
+    const special = teamByNumber(env, draftId, '1001A');
+    env.engine.setTeamLimit(draftId, special.id, 2, ADMIN);
+    expect(env.repos.teams.getById(special.id)?.maxInstances).toBe(2);
+    env.engine.pick(draftId, { participantId: order[0]!.id, teamId: special.id, actor: ADMIN });
+    expect(env.engine.getTeamInfo(draftId, special.id)).toMatchObject({ available: true, instancesUsed: 1, maxInstances: 2 });
+    expect(env.repos.teams.listAvailableWithCounts(draftId, 1).find((t) => t.id === special.id)).toMatchObject({ used: 1, limit: 2 });
+    env.engine.pick(draftId, { participantId: order[1]!.id, teamId: special.id, actor: ADMIN });
+    expect(() => env.engine.pick(draftId, { participantId: order[2]!.id, teamId: special.id, actor: ADMIN })).toThrow(/all 2 copies/);
+    expect(env.repos.teams.countAvailable(draftId, 1)).toBe(4);
+    env.engine.setTeamLimit(draftId, special.id, null, ADMIN);
+    expect(env.engine.getTeamInfo(draftId, special.id).maxInstances).toBe(1);
+    expect(() => env.engine.setTeamLimit(draftId, special.id, 99, ADMIN)).toThrow(/between 1 and 50/);
+    expect(env.repos.audit.listByType(draftId, 'team_limit_changed')).toHaveLength(2);
+  });
+});

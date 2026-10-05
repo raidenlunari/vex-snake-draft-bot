@@ -83,6 +83,7 @@ export function statusButtons(draftId: number): ButtonSpec[] {
     { id: customId('view', 'prepicks', draftId), label: 'My prepicks', style: 'primary', emoji: '📝' },
     { id: customId('view', 'order', draftId), label: 'Draft order', style: 'secondary', emoji: '🔢' },
     { id: customId('view', 'rosters', draftId), label: 'All rosters', style: 'secondary', emoji: '👥' },
+    { id: customId('teams', 'page', draftId, 0, 'grid'), label: 'Available teams', style: 'secondary', emoji: '🤖' },
   ];
 }
 

@@ -127,6 +127,7 @@ export function mapTeam(r: Row): Team {
     organization: r.organization ?? null,
     location: r.location ?? null,
     extra: r.extra_json ? (JSON.parse(r.extra_json) as Record<string, string>) : null,
+    maxInstances: num(r.max_instances),
     removedAt: r.removed_at ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,

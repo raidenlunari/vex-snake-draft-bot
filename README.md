@@ -36,7 +36,7 @@ Every admin command is validated server-side, not just hidden.
 | `/draft setup [name]` | Create a new draft (one open draft per server). |
 | `/draft channel set [channel] [post-title]` | Choose the text channel, thread or forum post for announcements. Picking a **forum** creates a new post. |
 | `/draft import file:<csv> [mode]` | Import teams from CSV (column detection, duplicate/invalid reporting). |
-| `/draft team add / remove / restore / list` | Manage the team pool. `remove force:true` also drops the team from rosters. |
+| `/draft team add / remove / restore / list / limit` | Manage the team pool. `remove force:true` also drops the team from rosters; `limit team times` sets how many times one specific team can be picked (overrides `config team-instances`). |
 | `/draft participant add user [user2…user5] [label] [seat]` | Register a participant. List several users to register them as one **team**: every member can pick, prepick and trade for it and all are pinged on its turn. With `seat`, add the users to an existing team at any time, even mid-draft or after it (late joiners). |
 | `/draft participant remove seat [user]` | Remove a seat, or just one user from it. |
 | `/draft config view` | Show the full configuration. |
@@ -69,6 +69,7 @@ Every admin command is validated server-side, not just hidden.
 | `/prepicks add / remove / view / reorder / clear` | Ordered auto-pick list. The bot picks the first available team when your turn comes. |
 | `/roster [user] [seat] [all]` | Rosters with pick numbers, rounds, original owners and trades. |
 | `/team number` | Availability and every owner instance with pick number, round and trade flag. |
+| `/teams [filter] [names]` | The pool of teams still available, as a paged number grid (copies left shown as ×n) or a list with names and schools. |
 | `/trade propose with give receive [note]` | Propose a trade. Assets: `1234A`, `R3` (your round-3 pick), `#17` (overall pick). |
 | `/trade accept / reject / cancel / view / list` | Answer and inspect trades (buttons are posted in the draft channel too). |
 

@@ -4,6 +4,7 @@ import { DraftError } from '../domain/errors.js';
 import type { Actor, ParticipantWithUsers, Prepick, Team } from '../domain/types.js';
 import type { Clock } from '../util/clock.js';
 import { loadContext, type DraftContext } from './context.js';
+import { instanceLimit } from './draftEngine.js';
 
 export interface PrepickEntry {
   prepick: Prepick;
@@ -23,7 +24,7 @@ export class PrepickService {
     const ctx = loadContext(this.repos, draftId);
     return this.repos.prepicks.list(participantId).map((prepick) => {
       const team = this.repos.teams.getById(prepick.teamId) as Team;
-      const available = !team.removedAt && this.repos.assets.listActiveForTeam(team.id).length < ctx.config.maxInstancesPerTeam;
+      const available = !team.removedAt && this.repos.assets.listActiveForTeam(team.id).length < instanceLimit(team, ctx.config);
       return { prepick, team, available };
     });
   }
@@ -36,7 +37,7 @@ export class PrepickService {
       const team = this.repos.teams.getById(teamId);
       if (!team || team.draftId !== draftId) throw new DraftError('TEAM_NOT_FOUND', 'That team is not in this draft.');
       if (team.removedAt) throw new DraftError('TEAM_REMOVED', `Team ${team.teamNumber} has been removed from this draft.`);
-      if (this.repos.assets.listActiveForTeam(team.id).length >= ctx.config.maxInstancesPerTeam) {
+      if (this.repos.assets.listActiveForTeam(team.id).length >= instanceLimit(team, ctx.config)) {
         throw new DraftError('TEAM_UNAVAILABLE', `Team ${team.teamNumber} has already been taken.`);
       }
       if (this.repos.prepicks.find(participantId, teamId)) throw new DraftError('PREPICK_ERROR', `Team ${team.teamNumber} is already in your prepick list.`);

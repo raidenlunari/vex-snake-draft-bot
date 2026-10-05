@@ -63,7 +63,7 @@ export class TeamRepository {
         .prepare(
           `SELECT t.* FROM teams t
            WHERE t.draft_id = ? AND t.removed_at IS NULL
-             AND (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') < ?
+             AND (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') < COALESCE(t.max_instances, ?)
              AND (UPPER(t.team_number) LIKE ? OR UPPER(COALESCE(t.team_name, '')) LIKE ?)
            ORDER BY t.team_number LIMIT ?`,
         )
@@ -76,7 +76,7 @@ export class TeamRepository {
       .prepare(
         `SELECT COUNT(*) AS c FROM teams t
          WHERE t.draft_id = ? AND t.removed_at IS NULL
-           AND (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') < ?`,
+           AND (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') < COALESCE(t.max_instances, ?)`,
       )
       .get(draftId, maxInstances) as { c: number };
     return row.c;
@@ -99,6 +99,29 @@ export class TeamRepository {
         )
         .all(draftId, like, like, limit) as Row[]
     ).map(mapTeam);
+  }
+
+  setMaxInstances(teamId: number, maxInstances: number | null, now: string): void {
+    this.db.prepare('UPDATE teams SET max_instances = ?, updated_at = ? WHERE id = ?').run(maxInstances, now, teamId);
+  }
+
+  /** Available teams with remaining copies, for the /teams view. */
+  listAvailableWithCounts(draftId: number, maxInstances: number, search?: string): Array<Team & { used: number; limit: number }> {
+    const like = search ? `%${search.toUpperCase()}%` : '%';
+    return (
+      this.db
+        .prepare(
+          `SELECT t.*, COALESCE(t.max_instances, ?) AS lim,
+                  (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') AS used
+           FROM teams t
+           WHERE t.draft_id = ? AND t.removed_at IS NULL
+             AND (UPPER(t.team_number) LIKE ? OR UPPER(COALESCE(t.team_name, '')) LIKE ? OR UPPER(COALESCE(t.organization, '')) LIKE ?)
+           ORDER BY t.team_number`,
+        )
+        .all(maxInstances, draftId, like, like, like) as Row[]
+    )
+      .filter((r) => r.used < r.lim)
+      .map((r) => ({ ...mapTeam(r), used: r.used as number, limit: r.lim as number }));
   }
 
   setRemoved(teamId: number, removedAt: string | null, now: string): void {
