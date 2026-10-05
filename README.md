@@ -58,6 +58,7 @@ Every admin command is validated server-side, not just hidden.
 | `/draft complete` | End the draft early. |
 | `/draft reset [purge]` | Wipe the draft (archive by default; `purge` deletes rows, audit kept). Requires confirmation. |
 | `/draft audit [limit]` | Recent audit events. |
+| `/draft export` | Download an .xlsx snapshot: drafter grid, pick log and every team with its status. |
 
 ### Everyone
 

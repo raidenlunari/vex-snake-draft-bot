@@ -100,14 +100,33 @@ export function participantChoices(ctx: BotContext, draft: Draft, query: string)
     .map((p) => ({ name: `${p.draftPosition ? `#${p.draftPosition} ` : ''}${p.label}`.slice(0, 100), value: `id:${p.id}` }));
 }
 
+export const MORE_HINT_VALUE = '?more';
+
+/**
+ * Autocomplete choices. Discord shows at most 25, so when more teams match the last
+ * entry becomes a hint telling the user to type part of the number.
+ */
 export function teamChoices(ctx: BotContext, draft: Draft, query: string, mode: 'available' | 'all' | 'removed'): Array<{ name: string; value: string }> {
   const repos = ctx.service.repos;
   const config = repos.drafts.getConfig(draft.id);
   let teams;
-  if (mode === 'available') teams = repos.teams.listAvailable(draft.id, config.maxInstancesPerTeam, query, 25);
-  else if (mode === 'removed') teams = repos.teams.listByDraft(draft.id, { includeRemoved: true }).filter((t) => t.removedAt && t.teamNumber.includes(query.toUpperCase())).slice(0, 25);
-  else teams = repos.teams.search(draft.id, query, 25);
-  return teams.map((t) => ({ name: `${t.teamNumber}${t.teamName ? ` — ${t.teamName}` : ''}`.slice(0, 100), value: t.teamNumber }));
+  let total = 0;
+  if (mode === 'available') {
+    teams = repos.teams.listAvailable(draft.id, config.maxInstancesPerTeam, query, 25);
+    total = repos.teams.countMatching(draft.id, query, true, config.maxInstancesPerTeam);
+  } else if (mode === 'removed') {
+    const removed = repos.teams.listByDraft(draft.id, { includeRemoved: true }).filter((t) => t.removedAt && t.teamNumber.includes(query.toUpperCase()));
+    teams = removed.slice(0, 25);
+    total = removed.length;
+  } else {
+    teams = repos.teams.search(draft.id, query, 25);
+    total = repos.teams.countMatching(draft.id, query, false, config.maxInstancesPerTeam);
+  }
+  const choices = teams.map((t) => ({ name: `${t.teamNumber}${t.teamName ? ` — ${t.teamName}` : ''}`.slice(0, 100), value: t.teamNumber }));
+  if (total > 25) {
+    choices.splice(24, 1, { name: `… ${total - 24} more — keep typing the team number to narrow the list`, value: MORE_HINT_VALUE });
+  }
+  return choices;
 }
 
 export function rosterTeamChoices(ctx: BotContext, draft: Draft, participantId: number, query: string): Array<{ name: string; value: string }> {

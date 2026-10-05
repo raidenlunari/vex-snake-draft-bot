@@ -1181,6 +1181,9 @@ export function instanceLimit(team: Team, config: DraftConfig): number {
 }
 
 export function normalizeTeamNumber(raw: string): string {
+  if (raw.trim().startsWith('?')) {
+    throw new DraftError('VALIDATION', 'That was the "more teams" hint, not a team. Type part of the team number (for example `248`) to narrow the list, or use `/teams` to see every available team.');
+  }
   return raw.trim().toUpperCase().replace(/\s+/g, '');
 }
 

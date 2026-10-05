@@ -29,6 +29,7 @@ import { fetchAttachmentText } from '../util/attachments.js';
 import { describeResolution } from './trade.js';
 import { parseSpreadsheetId } from '../../integrations/googleSheets.js';
 import { describeSheet } from '../../services/sheetSync.js';
+import { buildDraftWorkbook } from '../../services/exportWorkbook.js';
 
 const onOff = (b: boolean): string => (b ? 'enabled' : 'disabled');
 
@@ -51,6 +52,7 @@ const data = new SlashCommandBuilder()
   .addSubcommand((s) => s.setName('complete').setDescription('End the draft now, forfeiting remaining picks'))
   .addSubcommand((s) => s.setName('reset').setDescription('Wipe the current draft').addBooleanOption((o) => o.setName('purge').setDescription('Delete all draft data instead of archiving it')))
   .addSubcommand((s) => s.setName('audit').setDescription('Show recent audit events').addIntegerOption((o) => o.setName('limit').setDescription('How many (default 15)').setMinValue(1).setMaxValue(40)))
+  .addSubcommand((s) => s.setName('export').setDescription('Download the draft as an Excel file (grid, pick log, teams)'))
   .addSubcommandGroup((g) =>
     g
       .setName('channel')
@@ -368,6 +370,13 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
             { id: customId('reset', 'cancel', draft.id), label: 'Cancel', style: 'secondary' },
           ],
         }, { ephemeral: true });
+        return;
+      }
+      case 'export': {
+        const draft = requireCurrentDraft(ctx, guildId);
+        await defer(interaction);
+        const { buffer, filename } = await buildDraftWorkbook(service.engine, repos, draft.id);
+        await interaction.editReply({ content: `📎 **${draft.name}** — snapshot as of ${new Date().toUTCString()}.`, files: [{ attachment: buffer, name: filename }] });
         return;
       }
       case 'audit': {

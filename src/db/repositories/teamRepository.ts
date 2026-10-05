@@ -1,6 +1,7 @@
 import type { SqliteDatabase } from '../connection.js';
 import type { Team } from '../../domain/types.js';
 import { mapTeam, type Row } from './mappers.js';
+import { sortTeams } from '../../domain/teamOrder.js';
 
 export interface TeamInput {
   teamNumber: string;
@@ -52,23 +53,24 @@ export class TeamRepository {
     const sql = opts.includeRemoved
       ? 'SELECT * FROM teams WHERE draft_id = ? ORDER BY team_number'
       : 'SELECT * FROM teams WHERE draft_id = ? AND removed_at IS NULL ORDER BY team_number';
-    return (this.db.prepare(sql).all(draftId) as Row[]).map(mapTeam);
+    return sortTeams((this.db.prepare(sql).all(draftId) as Row[]).map(mapTeam));
   }
 
   /** Teams that still have at least one draftable instance. */
   listAvailable(draftId: number, maxInstances: number, search?: string, limit = 25): Team[] {
     const like = search ? `%${search.toUpperCase()}%` : '%';
-    return (
+    const all = (
       this.db
         .prepare(
           `SELECT t.* FROM teams t
            WHERE t.draft_id = ? AND t.removed_at IS NULL
              AND (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') < COALESCE(t.max_instances, ?)
              AND (UPPER(t.team_number) LIKE ? OR UPPER(COALESCE(t.team_name, '')) LIKE ?)
-           ORDER BY t.team_number LIMIT ?`,
+           ORDER BY t.team_number`,
         )
-        .all(draftId, maxInstances, like, like, limit) as Row[]
+        .all(draftId, maxInstances, like, like) as Row[]
     ).map(mapTeam);
+    return rankBySearch(all, search).slice(0, limit);
   }
 
   countAvailable(draftId: number, maxInstances: number): number {
@@ -91,14 +93,26 @@ export class TeamRepository {
 
   search(draftId: number, query: string, limit = 25): Team[] {
     const like = `%${query.toUpperCase()}%`;
-    return (
+    const all = (
       this.db
         .prepare(
           `SELECT * FROM teams WHERE draft_id = ? AND removed_at IS NULL AND (UPPER(team_number) LIKE ? OR UPPER(COALESCE(team_name,'')) LIKE ?)
-           ORDER BY team_number LIMIT ?`,
+           ORDER BY team_number`,
         )
-        .all(draftId, like, like, limit) as Row[]
+        .all(draftId, like, like) as Row[]
     ).map(mapTeam);
+    return rankBySearch(all, query).slice(0, limit);
+  }
+
+  /** How many teams match a search (to tell users when an autocomplete list is cut off). */
+  countMatching(draftId: number, query: string, availableOnly: boolean, maxInstances: number): number {
+    const like = `%${query.toUpperCase()}%`;
+    const sql = availableOnly
+      ? `SELECT COUNT(*) AS c FROM teams t WHERE t.draft_id = ? AND t.removed_at IS NULL
+           AND (SELECT COUNT(*) FROM draft_assets a WHERE a.team_id = t.id AND a.asset_type = 'team' AND a.status = 'active') < COALESCE(t.max_instances, ?)
+           AND (UPPER(t.team_number) LIKE ? OR UPPER(COALESCE(t.team_name,'')) LIKE ?)`
+      : `SELECT COUNT(*) AS c FROM teams t WHERE t.draft_id = ? AND ? >= 0 AND t.removed_at IS NULL AND (UPPER(t.team_number) LIKE ? OR UPPER(COALESCE(t.team_name,'')) LIKE ?)`;
+    return (this.db.prepare(sql).get(draftId, maxInstances, like, like) as { c: number }).c;
   }
 
   setMaxInstances(teamId: number, maxInstances: number | null, now: string): void {
@@ -121,7 +135,8 @@ export class TeamRepository {
         .all(maxInstances, draftId, like, like, like) as Row[]
     )
       .filter((r) => r.used < r.lim)
-      .map((r) => ({ ...mapTeam(r), used: r.used as number, limit: r.lim as number }));
+      .map((r) => ({ ...mapTeam(r), used: r.used as number, limit: r.lim as number }))
+      .sort((a, b) => sortTeams([a, b])[0] === a ? -1 : 1);
   }
 
   setRemoved(teamId: number, removedAt: string | null, now: string): void {
@@ -131,4 +146,14 @@ export class TeamRepository {
   count(draftId: number): number {
     return (this.db.prepare('SELECT COUNT(*) AS c FROM teams WHERE draft_id = ? AND removed_at IS NULL').get(draftId) as { c: number }).c;
   }
+}
+
+/** Natural order, with teams whose number starts with the query listed before other matches. */
+function rankBySearch<T extends { teamNumber: string }>(teams: T[], search?: string): T[] {
+  const sorted = sortTeams(teams);
+  if (!search) return sorted;
+  const q = search.toUpperCase().replace(/\s+/g, '');
+  const starts = sorted.filter((t) => t.teamNumber.startsWith(q));
+  const rest = sorted.filter((t) => !t.teamNumber.startsWith(q));
+  return [...starts, ...rest];
 }
