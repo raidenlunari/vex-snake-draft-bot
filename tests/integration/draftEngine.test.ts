@@ -501,3 +501,23 @@ describe('swaps', () => {
     expect(() => env.engine.swapTeam(draftId, { participantId: a.id, oldTeamId: fresh.id, newTeamId: old.id, actor: aUser })).toThrow(/disabled/);
   });
 });
+
+describe('invites', () => {
+  it('a seat member can invite someone, who joins on acceptance', () => {
+    const env = createTestEnv();
+    const { draftId, order } = setupDraft(env, { participants: 2, teams: 4, config: { rounds: 1 }, start: true });
+    const a = order[0]!;
+    const aUser = user(a.users[0]!.discordUserId);
+    expect(() => env.engine.inviteToSeat(draftId, a.id, 'newbie', user('stranger'))).toThrow(/not a member/);
+    expect(() => env.engine.inviteToSeat(draftId, a.id, order[1]!.users[0]!.discordUserId, aUser)).toThrow(/already registered/);
+    expect(() => env.engine.inviteToSeat(draftId, a.id, aUser.id, aUser)).toThrow(/already on this seat/);
+    env.engine.inviteToSeat(draftId, a.id, 'newbie', aUser);
+    expect(env.repos.audit.listByType(draftId, 'participant_invited')).toHaveLength(1);
+    // accepting = joining as themselves
+    const seat = env.engine.addUserToSeat(draftId, a.id, 'newbie', user('newbie'));
+    expect(seat.users.map((u) => u.discordUserId)).toContain('newbie');
+    const team = env.repos.teams.listAvailable(draftId, 1)[0]!;
+    env.engine.pick(draftId, { participantId: a.id, teamId: team.id, actor: user('newbie') });
+    expect(env.engine.getRoster(draftId, a.id).teams).toHaveLength(1);
+  });
+});

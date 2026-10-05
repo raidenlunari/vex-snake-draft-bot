@@ -1,5 +1,6 @@
 import type { Command } from '../context.js';
 import { draftCommand } from './draft.js';
+import { inviteCommand } from './invite.js';
 import { pickCommand } from './pick.js';
 import { prepicksCommand } from './prepicks.js';
 import { repickCommand } from './repick.js';
@@ -10,4 +11,4 @@ import { teamCommand } from './team.js';
 import { teamsCommand } from './teams.js';
 import { tradeCommand } from './trade.js';
 
-export const commands: Command[] = [draftCommand, statusCommand, pickCommand, prepicksCommand, repickCommand, rosterCommand, swapCommand, teamCommand, teamsCommand, tradeCommand];
+export const commands: Command[] = [draftCommand, statusCommand, pickCommand, inviteCommand, prepicksCommand, repickCommand, rosterCommand, swapCommand, teamCommand, teamsCommand, tradeCommand];

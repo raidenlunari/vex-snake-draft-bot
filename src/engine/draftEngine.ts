@@ -266,6 +266,29 @@ export class DraftEngine {
     });
   }
 
+  /**
+   * A seat member invites another Discord user. Validates now (membership, seat limits)
+   * and records the invite; the user actually joins through `addUserToSeat` once they accept.
+   */
+  inviteToSeat(draftId: number, participantId: number, inviteeId: string, actor: Actor): ParticipantWithUsers {
+    return this.tx(() => {
+      const ctx = loadContext(this.repos, draftId);
+      requireStatus(ctx, ['setup', 'randomized', 'active', 'completed'], 'Inviting someone to a seat');
+      const seat = this.requireParticipant(ctx, participantId);
+      if (actor.kind === 'user' && !this.repos.participants.isMember(seat.id, actor.id)) {
+        throw new DraftError('PERMISSION_DENIED', `You are not a member of "${seat.label}".`);
+      }
+      if (inviteeId === actor.id) throw new DraftError('VALIDATION', 'You are already on this seat.');
+      if (this.repos.participants.isMember(seat.id, inviteeId)) throw new DraftError('PARTICIPANT_EXISTS', `<@${inviteeId}> is already on "${seat.label}".`);
+      const seats = this.repos.participants.listSeatsForUser(draftId, inviteeId);
+      if (seats.length >= ctx.config.maxSeatsPerUser) {
+        throw new DraftError('PARTICIPANT_EXISTS', `<@${inviteeId}> is already registered as "${seats[0]?.label}" and this draft allows ${ctx.config.maxSeatsPerUser} seat(s) per person.`);
+      }
+      this.audit(ctx.draft.guildId, draftId, 'participant_invited', actor, `<@${actor.id}> invited <@${inviteeId}> to seat "${seat.label}"`, { participantId, inviteeId });
+      return seat;
+    });
+  }
+
   removeUserFromSeat(draftId: number, participantId: number, discordUserId: string, actor: Actor): ParticipantWithUsers {
     return this.tx(() => {
       const ctx = loadContext(this.repos, draftId);

@@ -49,7 +49,7 @@ describe('slash command definitions', () => {
   });
 
   it('exposes the expected command surface', () => {
-    expect(commands.map((c) => c.data.name).sort()).toEqual(['draft', 'pick', 'prepicks', 'repick', 'roster', 'status', 'swap', 'team', 'teams', 'trade']);
+    expect(commands.map((c) => c.data.name).sort()).toEqual(['draft', 'invite', 'pick', 'prepicks', 'repick', 'roster', 'status', 'swap', 'team', 'teams', 'trade']);
     const draft = commands.find((c) => c.data.name === 'draft')!;
     const top = (draft.data.options ?? []).map((o) => o.name).sort();
     expect(top).toEqual(['audit', 'channel', 'complete', 'config', 'export', 'import', 'participant', 'pick', 'randomize', 'repick', 'reset', 'roster', 'setup', 'sheet', 'skip', 'start', 'team', 'trade']);

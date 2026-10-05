@@ -230,7 +230,33 @@ const teamsHandler: ComponentHandler = {
   },
 };
 
-export const componentHandlers: ComponentHandler[] = [pickHandler, startHandler, completeHandler, resetHandler, tradeHandler, viewHandler, repickHandler, teamsHandler];
+const inviteHandler: ComponentHandler = {
+  namespace: 'invite',
+  async execute(interaction, args, ctx) {
+    const [action] = args;
+    const draftId = requireDraftId(ctx, interaction, args[1]);
+    const seatId = num(args[2], 'seat');
+    const inviteeId = args[3];
+    if (interaction.user.id !== inviteeId) throw new DraftError('PERMISSION_DENIED', 'Only the invited person can answer this invite.');
+    const seat = ctx.service.repos.participants.getWithUsers(seatId);
+    if (!seat || seat.draftId !== draftId) throw new DraftError('PARTICIPANT_NOT_FOUND', 'That seat no longer exists.');
+    if (action === 'decline') {
+      if (isComponent(interaction)) await updateMessage(interaction, { content: `<@${inviteeId}> declined the invite to **${seat.label}**.`, embeds: [], buttons: [], mentionUserIds: [] });
+      return;
+    }
+    const updated = ctx.service.engine.addUserToSeat(draftId, seatId, inviteeId, { id: inviteeId, kind: 'user' });
+    if (isComponent(interaction)) {
+      await updateMessage(interaction, {
+        content: `✅ <@${inviteeId}> joined **${updated.label}** (${updated.users.map((u) => `<@${u.discordUserId}>`).join(', ')}).`,
+        embeds: [],
+        buttons: [],
+        mentionUserIds: [],
+      });
+    }
+  },
+};
+
+export const componentHandlers: ComponentHandler[] = [pickHandler, startHandler, completeHandler, resetHandler, tradeHandler, viewHandler, repickHandler, teamsHandler, inviteHandler];
 
 /** Small helper used by status replies elsewhere. */
 export function describeTurn(ctx: BotContext, draftId: number): string {
