@@ -1,4 +1,3 @@
-import { formatDuration } from '../domain/config.js';
 import type { DraftConfig, ParticipantWithUsers } from '../domain/types.js';
 import { mentionSeat } from '../engine/draftEngine.js';
 import type { DraftEvent } from '../engine/events.js';
@@ -6,6 +5,11 @@ import { Colors, type AnnouncementPayload } from './announcer.js';
 
 function userIds(p: ParticipantWithUsers): string[] {
   return p.users.map((u) => u.discordUserId);
+}
+
+/** A seat named without pinging anyone. */
+function plainSeat(p: ParticipantWithUsers): string {
+  return p.label;
 }
 
 export function discordTimestamp(iso: string, style: 'R' | 'f' | 't' = 'R'): string {
@@ -16,8 +20,10 @@ export function discordTimestamp(iso: string, style: 'R' | 'f' | 't' = 'R'): str
  * Renders engine events into channel announcements. Consecutive events are merged
  * where it reads better (a pick followed by the next turn becomes one message).
  */
+type TaggedPayload = AnnouncementPayload & { kind?: 'pick' | 'turn' };
+
 export function renderEvents(events: DraftEvent[], config: DraftConfig): AnnouncementPayload[] {
-  const out: AnnouncementPayload[] = [];
+  const out: TaggedPayload[] = [];
   for (const event of events) {
     switch (event.type) {
       case 'draft_started': {
@@ -30,27 +36,22 @@ export function renderEvents(events: DraftEvent[], config: DraftConfig): Announc
         break;
       }
       case 'pick_made': {
-        const who = mentionSeat(event.participant);
-        const where = event.slot ? `Round ${event.slot.round}, pick #${event.slot.overallPick}` : 'Admin addition';
         const how =
-          event.kind === 'prepick' ? ' (auto-pick from prepicks)' : event.kind === 'forced' ? ' (entered by an admin)' : event.kind === 'catch_up' ? ' (catch-up pick)' : event.kind === 'admin_add' ? ' (added by an admin)' : '';
-        const name = event.team.teamName ? ` — ${event.team.teamName}` : '';
-        out.push({
-          content: `✅ **${where}:** ${who} selected **${event.team.teamNumber}**${name}${how}`,
-          mentionUserIds: [],
-        });
+          event.kind === 'prepick' ? ' (prepick)' : event.kind === 'forced' ? ' (entered by an admin)' : event.kind === 'catch_up' ? ' (catch-up for pick #' + (event.slot?.overallPick ?? '?') + ')' : event.kind === 'admin_add' ? ' (added by an admin)' : '';
+        out.push({ kind: 'pick', content: `${plainSeat(event.participant)} picked **${event.team.teamNumber}**${how}.`, mentionUserIds: [] });
         break;
       }
       case 'turn_started': {
-        const who = mentionSeat(event.participant);
-        const lines = [`🎯 **Round ${event.slot.round}, pick #${event.slot.overallPick} of ${event.totalPicks}** — it's ${who}'s turn!`];
-        if (event.picksThisTurn > 1) lines.push(`This is pick ${event.pickIndexInTurn} of ${event.picksThisTurn} this turn.`);
-        if (event.deadline && config.skipTimerSeconds) {
-          const hours = config.skipHoursStart && config.skipHoursEnd ? ` (timer runs ${config.skipHoursStart}–${config.skipHoursEnd} ${config.timezone})` : '';
-          lines.push(`⏳ Timer started: ${formatDuration(config.skipTimerSeconds)}${hours}. Auto-skip ${discordTimestamp(event.deadline)}.`);
-        }
-        lines.push('Use `/pick` to choose a team.');
-        out.push({ content: lines.join('\n'), mentionUserIds: userIds(event.participant) });
+        const [onDeck, inHole, fourth, fifth] = event.upcoming;
+        const lines = [`${mentionSeat(event.participant)} is up.`];
+        if (event.picksThisTurn > 1) lines[0] += ` (pick ${event.pickIndexInTurn} of ${event.picksThisTurn})`;
+        if (onDeck) lines.push(`${mentionSeat(onDeck)} is on deck.`);
+        if (inHole) lines.push(`${mentionSeat(inHole)} is in the hole.`);
+        if (fourth) lines.push(`${plainSeat(fourth)} is 4th.`);
+        if (fifth) lines.push(`${plainSeat(fifth)} is 5th.`);
+        if (event.deadline && config.skipTimerSeconds) lines.push(`Auto-skip ${discordTimestamp(event.deadline)}.`);
+        const pinged = [event.participant, onDeck, inHole].filter((p): p is ParticipantWithUsers => !!p).flatMap(userIds);
+        out.push({ kind: 'turn', content: lines.join('\n'), mentionUserIds: pinged });
         break;
       }
       case 'turn_skipped': {
@@ -128,18 +129,18 @@ export function renderEvents(events: DraftEvent[], config: DraftConfig): Announc
 }
 
 /** Joins "pick made" + "turn started" into one message to reduce channel noise. */
-function mergePickAndTurn(payloads: AnnouncementPayload[]): AnnouncementPayload[] {
-  const merged: AnnouncementPayload[] = [];
+function mergePickAndTurn(payloads: TaggedPayload[]): AnnouncementPayload[] {
+  const merged: TaggedPayload[] = [];
   for (const p of payloads) {
     const prev = merged[merged.length - 1];
-    if (prev && prev.content && p.content && !prev.embeds && !p.embeds && prev.content.startsWith('✅') && p.content.startsWith('🎯')) {
+    if (prev && prev.content && p.content && !prev.embeds && !p.embeds && prev.kind === 'pick' && p.kind === 'turn') {
       merged[merged.length - 1] = {
-        content: `${prev.content}\n\n${p.content}`,
+        content: `${prev.content}\n${p.content}`,
         mentionUserIds: [...(prev.mentionUserIds ?? []), ...(p.mentionUserIds ?? [])],
       };
       continue;
     }
     merged.push(p);
   }
-  return merged;
+  return merged.map(({ kind: _kind, ...rest }) => rest);
 }

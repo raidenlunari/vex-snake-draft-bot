@@ -1076,7 +1076,20 @@ export class DraftEngine {
       deadline,
     });
     const current: PickSlot = { ...slot, status: 'current' };
-    events.push({ type: 'turn_started', draftId: ctx.draft.id, participant: owner, slot: current, deadline, pickIndexInTurn, picksThisTurn, totalPicks: this.repos.slots.count(ctx.draft.id) });
+    const upcoming: ParticipantWithUsers[] = [];
+    let cursor = slot.overallPick;
+    let lastOwner = ownerId;
+    for (let guard = 0; upcoming.length < 4 && guard < 64; guard++) {
+      const next = this.repos.slots.nextPending(ctx.draft.id, cursor);
+      if (!next) break;
+      cursor = next.overallPick;
+      const nextOwner = this.slotOwnerId(next);
+      if (nextOwner === lastOwner) continue;
+      lastOwner = nextOwner;
+      const p = this.repos.participants.getWithUsers(nextOwner);
+      if (p) upcoming.push(p);
+    }
+    events.push({ type: 'turn_started', draftId: ctx.draft.id, participant: owner, slot: current, deadline, pickIndexInTurn, picksThisTurn, totalPicks: this.repos.slots.count(ctx.draft.id), upcoming });
     return current;
   }
 
@@ -1126,6 +1139,5 @@ export function mentionSeat(p: ParticipantWithUsers | null): string {
   if (!p) return 'an unknown participant';
   const mentions = p.users.map((u) => `<@${u.discordUserId}>`);
   if (mentions.length === 0) return `**${p.label}**`;
-  const labelMatchesUser = p.users.length === 1;
-  return labelMatchesUser ? `${mentions[0]} (${p.label})` : `**${p.label}** (${mentions.join(' ')})`;
+  return p.users.length === 1 ? (mentions[0] as string) : `**${p.label}** (${mentions.join(' ')})`;
 }

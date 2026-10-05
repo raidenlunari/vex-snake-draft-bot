@@ -25,6 +25,8 @@ export type DraftEvent =
       pickIndexInTurn: number;
       picksThisTurn: number;
       totalPicks: number;
+      /** The next distinct seats after this one, in order (on deck, in the hole, 4th, 5th). */
+      upcoming: ParticipantWithUsers[];
     }
   | {
       type: 'turn_skipped';

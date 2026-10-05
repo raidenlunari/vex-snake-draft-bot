@@ -25,7 +25,7 @@ describe('turn timers', () => {
     const first = env.repos.drafts.getById(draftId)!;
     expect(first.turnDeadlineAt).toBe(new Date(env.clock.nowMs() + 600_000).toISOString());
     // Announcement mentions the timer.
-    expect(env.announcer.sent.some((s) => s.payload.content?.includes('Timer started'))).toBe(true);
+    expect(env.announcer.sent.some((s) => s.payload.content?.includes('Auto-skip'))).toBe(true);
 
     await env.scheduler.advance(599_000);
     expect(env.repos.slots.getByOverall(draftId, 1)?.status).toBe('current');
