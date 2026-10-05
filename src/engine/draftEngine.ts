@@ -1134,8 +1134,17 @@ export class DraftEngine {
       const p = this.repos.participants.getWithUsers(nextOwner);
       if (p) upcoming.push(p);
     }
-    events.push({ type: 'turn_started', draftId: ctx.draft.id, participant: owner, slot: current, deadline, pickIndexInTurn, picksThisTurn, totalPicks: this.repos.slots.count(ctx.draft.id), upcoming });
+    const autoPickerIds = ctx.config.allowPrepicks ? [owner, ...upcoming].filter((p) => this.hasLivePrepick(ctx, p.id)).map((p) => p.id) : [];
+    events.push({ type: 'turn_started', draftId: ctx.draft.id, participant: owner, slot: current, deadline, pickIndexInTurn, picksThisTurn, totalPicks: this.repos.slots.count(ctx.draft.id), upcoming, autoPickerIds });
     return current;
+  }
+
+  /** Whether the seat has a prepick whose team can still be drafted. */
+  private hasLivePrepick(ctx: DraftContext, participantId: number): boolean {
+    return this.repos.prepicks.list(participantId).some((p) => {
+      const team = this.repos.teams.getById(p.teamId);
+      return !!team && !team.removedAt && this.repos.assets.listActiveForTeam(team.id).length < instanceLimit(team, ctx.config);
+    });
   }
 
   private deadlineFor(config: DraftConfig, nowIso: string): string | null {

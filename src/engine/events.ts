@@ -27,6 +27,8 @@ export type DraftEvent =
       totalPicks: number;
       /** The next distinct seats after this one, in order (on deck, in the hole, 4th, 5th). */
       upcoming: ParticipantWithUsers[];
+      /** Seat ids that have at least one still-available prepick; they are not pinged. */
+      autoPickerIds: number[];
     }
   | {
       type: 'turn_skipped';

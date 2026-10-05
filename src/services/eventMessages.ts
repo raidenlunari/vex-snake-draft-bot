@@ -43,14 +43,17 @@ export function renderEvents(events: DraftEvent[], config: DraftConfig): Announc
       }
       case 'turn_started': {
         const [onDeck, inHole, fourth, fifth] = event.upcoming;
-        const lines = [`${mentionSeat(event.participant)} is up.`];
+        const auto = new Set(event.autoPickerIds);
+        // Seats with a live prepick list are named but not pinged: the bot will pick for them.
+        const name = (p: ParticipantWithUsers): string => (auto.has(p.id) ? `${plainSeat(p)} (prepick)` : mentionSeat(p));
+        const lines = [`${name(event.participant)} is up.`];
         if (event.picksThisTurn > 1) lines[0] += ` (pick ${event.pickIndexInTurn} of ${event.picksThisTurn})`;
-        if (onDeck) lines.push(`${mentionSeat(onDeck)} is on deck.`);
-        if (inHole) lines.push(`${mentionSeat(inHole)} is in the hole.`);
+        if (onDeck) lines.push(`${name(onDeck)} is on deck.`);
+        if (inHole) lines.push(`${name(inHole)} is in the hole.`);
         if (fourth) lines.push(`${plainSeat(fourth)} is 4th.`);
         if (fifth) lines.push(`${plainSeat(fifth)} is 5th.`);
         if (event.deadline && config.skipTimerSeconds) lines.push(`Auto-skip ${discordTimestamp(event.deadline)}.`);
-        const pinged = [event.participant, onDeck, inHole].filter((p): p is ParticipantWithUsers => !!p).flatMap(userIds);
+        const pinged = [event.participant, onDeck, inHole].filter((p): p is ParticipantWithUsers => !!p && !auto.has(p.id)).flatMap(userIds);
         out.push({ kind: 'turn', content: lines.join('\n'), mentionUserIds: pinged });
         break;
       }

@@ -35,6 +35,23 @@ describe('event rendering', () => {
     expect(payloads[0]?.mentionUserIds).toEqual([order[1]!.users[0]!.discordUserId, first.users[0]!.discordUserId, order[1]!.users[0]!.discordUserId]);
   });
 
+  it('does not ping seats that have a live prepick list', () => {
+    const env = createTestEnv();
+    const { draftId, order } = setupDraft(env, { participants: 4, config: { rounds: 1, prepickMode: 'on_timeout' }, start: true });
+    const [a, b, c] = [order[0]!, order[1]!, order[2]!];
+    env.prepicks.add(draftId, c.id, teamByNumber(env, draftId, '1010A').id, ADMIN);
+    const events = env.engine.pick(draftId, { participantId: a.id, teamId: teamByNumber(env, draftId, '1001A').id, actor: ADMIN });
+    const [payload] = renderEvents(events, { ...defaultDraftConfig(), prepickMode: 'on_timeout' });
+    const lines = payload!.content!.split('\n');
+    expect(lines[1]).toBe(`<@${b.users[0]!.discordUserId}> is up.`);
+    expect(lines[2]).toBe(`${c.label} (prepick) is on deck.`);
+    expect(payload?.mentionUserIds).toEqual([b.users[0]!.discordUserId, order[3]!.users[0]!.discordUserId]);
+    // once their prepick is gone (taken by someone else), they are pinged again
+    env.engine.pick(draftId, { participantId: b.id, teamId: teamByNumber(env, draftId, '1010A').id, actor: ADMIN });
+    const next = env.engine.currentTurn(draftId)!;
+    expect(next.owner.id).toBe(c.id);
+  });
+
   it('renders skips, completion and corrections', () => {
     const env = createTestEnv();
     const { draftId } = setupDraft(env, { participants: 2, config: { rounds: 1 }, start: true });
