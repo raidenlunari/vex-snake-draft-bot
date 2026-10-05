@@ -69,6 +69,7 @@ export function mapConfig(r: Row): DraftConfig {
     maxSeatsPerUser: r.max_seats_per_user,
     maxRosterSize: num(r.max_roster_size),
     requirePickConfirmation: bool(r.require_pick_confirmation),
+    allowSwaps: r.allow_swaps === undefined ? true : bool(r.allow_swaps),
   };
 }
 
@@ -94,6 +95,7 @@ export function configToRow(c: DraftConfig): Row {
     max_seats_per_user: c.maxSeatsPerUser,
     max_roster_size: c.maxRosterSize,
     require_pick_confirmation: c.requirePickConfirmation ? 1 : 0,
+    allow_swaps: c.allowSwaps ? 1 : 0,
   };
 }
 

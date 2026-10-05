@@ -76,6 +76,9 @@ export function renderEvents(events: DraftEvent[], config: DraftConfig): Announc
           mentionUserIds: [],
         });
         break;
+      case 'team_swapped':
+        out.push({ content: `🔄 ${plainSeat(event.participant)} swapped **${event.oldTeam.teamNumber}** for **${event.newTeam.teamNumber}**${event.slot ? ` (pick #${event.slot.overallPick})` : ''}. ${event.oldTeam.teamNumber} is available again.`, mentionUserIds: [] });
+        break;
       case 'roster_changed':
         out.push({ content: `🛠️ **Roster update:** ${event.summary}.`, mentionUserIds: [] });
         break;

@@ -42,7 +42,7 @@ Every admin command is validated server-side, not just hidden.
 | `/draft config view` | Show the full configuration. |
 | `/draft config rounds / picks-per-round / participants / snake` | Draft structure (locked once started). |
 | `/draft config skip-time / skip-hours / timezone` | Auto-skip timer, e.g. `15m`, `09:00 22:00`, `America/Chicago`. |
-| `/draft config prepicks / after-skip / pick-confirmation` | Prepick mode, catch-up policy, confirm button on `/pick`. |
+| `/draft config prepicks / after-skip / pick-confirmation / swaps` | Prepick mode, catch-up policy, confirm button on `/pick`, whether `/swap` is allowed. |
 | `/draft config trades / two-for-one / future-picks / trade-approval / post-draft-trades` | Trade rules. |
 | `/draft config team-instances / seats-per-user / roster-size` | Duplicate team copies, multi-seat users, roster caps. |
 | `/draft randomize` | Securely shuffle the order (crypto RNG) and show it with a **Start draft** button. |
@@ -69,6 +69,7 @@ Every admin command is validated server-side, not just hidden.
 | `/prepicks add / remove / view / reorder / clear` | Ordered auto-pick list. The bot picks the first available team when your turn comes. |
 | `/roster [user] [seat] [all]` | Rosters with pick numbers, rounds, original owners and trades. |
 | `/team number` | Availability and every owner instance with pick number, round and trade flag. |
+| `/swap old-team new-team [seat]` | Swap one of your own teams for any unpicked team, immediately, keeping the pick number. Admins can turn this off with `/draft config swaps`. |
 | `/teams [filter] [names]` | The pool of teams still available, as a paged number grid (copies left shown as ×n) or a list with names and schools. |
 | `/trade propose with give receive [note]` | Propose a trade. Assets: `1234A`, `R3` (your round-3 pick), `#17` (overall pick). |
 | `/trade accept / reject / cancel / view / list` | Answer and inspect trades (buttons are posted in the draft channel too). |

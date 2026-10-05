@@ -140,6 +140,7 @@ const data = new SlashCommandBuilder()
       .addSubcommand((s) => s.setName('seats-per-user').setDescription('How many seats one Discord user may control').addIntegerOption((o) => o.setName('number').setDescription('1 or more').setRequired(true).setMinValue(1).setMaxValue(50)))
       .addSubcommand((s) => s.setName('roster-size').setDescription('Max teams + remaining picks per seat (0 = unlimited)').addIntegerOption((o) => o.setName('number').setDescription('0 = unlimited').setRequired(true).setMinValue(0)))
       .addSubcommand((s) => s.setName('pick-confirmation').setDescription('Ask players to confirm /pick with a button').addBooleanOption((o) => o.setName('enabled').setDescription('Require confirmation').setRequired(true)))
+      .addSubcommand((s) => s.setName('swaps').setDescription('Let players swap their own teams for unpicked ones with /swap').addBooleanOption((o) => o.setName('enabled').setDescription('Allow swaps').setRequired(true)))
       .addSubcommand((s) => s.setName('admin-role').setDescription('Role that may run /draft commands (besides Manage Server)').addRoleOption((o) => o.setName('role').setDescription('Role (omit to clear)'))),
   )
   .addSubcommandGroup((g) =>
@@ -628,6 +629,10 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
       case 'pick-confirmation':
         patch.requirePickConfirmation = interaction.options.getBoolean('enabled', true);
         note = `Pick confirmation ${onOff(patch.requirePickConfirmation)}.`;
+        break;
+      case 'swaps':
+        patch.allowSwaps = interaction.options.getBoolean('enabled', true);
+        note = `Swaps ${onOff(patch.allowSwaps)}.`;
         break;
       default:
         throw new DraftError('VALIDATION', 'Unknown setting.');

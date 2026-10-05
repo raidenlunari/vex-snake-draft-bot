@@ -564,6 +564,48 @@ export class DraftEngine {
     });
   }
 
+  /**
+   * A participant swaps one of their own teams for an unpicked team. No approval: the
+   * roster entry keeps its pick number and the old team returns to the pool.
+   */
+  swapTeam(draftId: number, input: { participantId: number; oldTeamId: number; newTeamId: number; actor: Actor }): DraftEvent[] {
+    return this.tx(() => {
+      const ctx = loadContext(this.repos, draftId);
+      requireStatus(ctx, ['active', 'completed'], 'Swapping');
+      if (!ctx.config.allowSwaps) throw new DraftError('VALIDATION', 'Swaps are disabled for this draft.');
+      const participant = this.requireParticipant(ctx, input.participantId);
+      if (input.actor.kind === 'user' && !this.repos.participants.isMember(participant.id, input.actor.id)) {
+        throw new DraftError('PERMISSION_DENIED', `You are not a member of "${participant.label}".`);
+      }
+      const oldTeam = this.requireTeam(ctx, input.oldTeamId);
+      const asset = this.repos.assets.findActiveTeamAsset(participant.id, oldTeam.id);
+      if (!asset) throw new DraftError('ASSET_NOT_FOUND', `Team ${oldTeam.teamNumber} is not on your roster.`);
+      if (oldTeam.id === input.newTeamId) throw new DraftError('VALIDATION', 'That is the same team.');
+      const newTeam = this.requireAvailableTeam(ctx, input.newTeamId);
+      this.cancelOpenTradesForAssets(ctx, [asset.id], `team ${oldTeam.teamNumber} was swapped for ${newTeam.teamNumber}`, input.actor);
+      const slot = asset.pickSlotId ? this.repos.slots.getById(asset.pickSlotId) : null;
+      const now = this.clock.nowIso();
+      this.repos.assets.setTeam(asset.id, newTeam.id, this.nextInstanceNo(newTeam.id), now);
+      const oldPick = this.repos.picks.getActiveForAsset(asset.id);
+      if (oldPick) this.repos.picks.void(oldPick.id, input.actor.id, `swapped for ${newTeam.teamNumber}`, now);
+      this.repos.picks.create({
+        draftId,
+        pickSlotId: slot?.id ?? null,
+        overallPick: slot?.overallPick ?? null,
+        round: slot?.round ?? null,
+        participantId: participant.id,
+        teamId: newTeam.id,
+        assetId: asset.id,
+        kind: 'swap',
+        madeBy: input.actor.id,
+        now,
+      });
+      this.repos.prepicks.removeByTeam(draftId, newTeam.id);
+      this.audit(ctx.draft.guildId, draftId, 'team_swapped', input.actor, `"${participant.label}" swapped ${oldTeam.teamNumber} for ${newTeam.teamNumber}${slot ? ` (pick #${slot.overallPick})` : ''}`, { assetId: asset.id, participantId: participant.id }, { teamId: oldTeam.id, teamNumber: oldTeam.teamNumber }, { teamId: newTeam.id, teamNumber: newTeam.teamNumber });
+      return [{ type: 'team_swapped', draftId, participant, oldTeam, newTeam, slot }];
+    });
+  }
+
   adminDropTeam(draftId: number, participantId: number, teamId: number, opts: { removeFromPool: boolean }, actor: Actor): DraftEvent[] {
     return this.tx(() => {
       const ctx = loadContext(this.repos, draftId);

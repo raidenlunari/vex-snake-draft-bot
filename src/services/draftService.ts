@@ -121,6 +121,10 @@ export class DraftService {
 
   // --- admin roster ----------------------------------------------------------
 
+  async swapTeam(draftId: number, input: { participantId: number; oldTeamId: number; newTeamId: number; actor: Actor }): Promise<DraftEvent[]> {
+    return this.mutate(draftId, () => this.engine.swapTeam(draftId, input));
+  }
+
   async adminAddTeam(draftId: number, participantId: number, teamId: number, actor: Actor): Promise<DraftEvent[]> {
     return this.mutate(draftId, () => this.engine.adminAddTeam(draftId, participantId, teamId, actor));
   }

@@ -472,3 +472,32 @@ describe('per-team pick limits', () => {
     expect(env.repos.audit.listByType(draftId, 'team_limit_changed')).toHaveLength(2);
   });
 });
+
+describe('swaps', () => {
+  it('lets a participant swap their own team for an unpicked one without approval', () => {
+    const env = createTestEnv();
+    const { draftId, order } = setupDraft(env, { participants: 2, teams: 6, config: { rounds: 1 }, start: true });
+    const a = order[0]!;
+    const aUser = user(a.users[0]!.discordUserId);
+    const bUser = user(order[1]!.users[0]!.discordUserId);
+    pickNextAvailable(env, draftId); // A takes 1001A
+    pickNextAvailable(env, draftId); // B takes 1002A
+    const old = teamByNumber(env, draftId, '1001A');
+    const fresh = teamByNumber(env, draftId, '1005A');
+    const taken = teamByNumber(env, draftId, '1002A');
+    expect(() => env.engine.swapTeam(draftId, { participantId: a.id, oldTeamId: old.id, newTeamId: fresh.id, actor: bUser })).toThrow(/not a member/);
+    expect(() => env.engine.swapTeam(draftId, { participantId: a.id, oldTeamId: old.id, newTeamId: taken.id, actor: aUser })).toThrow(/no longer available/);
+    expect(() => env.engine.swapTeam(draftId, { participantId: a.id, oldTeamId: taken.id, newTeamId: fresh.id, actor: aUser })).toThrow(/not on your roster/);
+    const events = env.engine.swapTeam(draftId, { participantId: a.id, oldTeamId: old.id, newTeamId: fresh.id, actor: aUser });
+    expect(events.map((e) => e.type)).toEqual(['team_swapped']);
+    const roster = env.engine.getRoster(draftId, a.id);
+    expect(roster.teams.map((t) => t.team.teamNumber)).toEqual(['1005A']);
+    expect(roster.teams[0]?.overallPick).toBe(1);
+    expect(env.engine.getTeamInfo(draftId, old.id).available).toBe(true);
+    const history = env.repos.picks.listByDraft(draftId, { includeVoided: true }).filter((p) => p.participantId === a.id);
+    expect(history.map((p) => p.kind)).toEqual(['pick', 'swap']);
+    expect(env.repos.audit.listByType(draftId, 'team_swapped')).toHaveLength(1);
+    env.engine.updateConfig(draftId, { allowSwaps: false }, ADMIN);
+    expect(() => env.engine.swapTeam(draftId, { participantId: a.id, oldTeamId: fresh.id, newTeamId: old.id, actor: aUser })).toThrow(/disabled/);
+  });
+});

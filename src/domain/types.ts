@@ -7,7 +7,7 @@ export type SlotStatus = 'pending' | 'current' | 'picked' | 'skipped' | 'forfeit
 export type AssetType = 'team' | 'pick';
 export type AssetStatus = 'active' | 'consumed' | 'dropped' | 'removed' | 'void';
 export type AcquiredVia = 'draft' | 'pick' | 'admin' | 'trade';
-export type PickKind = 'pick' | 'prepick' | 'forced' | 'catch_up' | 'admin_add' | 'correction' | 'repick';
+export type PickKind = 'pick' | 'prepick' | 'forced' | 'catch_up' | 'admin_add' | 'correction' | 'repick' | 'swap';
 export type RepickStatus = 'open' | 'proposed' | 'approved' | 'cancelled';
 export type TradeStatus =
   | 'proposed'
@@ -70,6 +70,8 @@ export interface DraftConfig {
   /** Max teams + pending picks a seat may hold; null = unlimited. */
   maxRosterSize: number | null;
   requirePickConfirmation: boolean;
+  /** Participants may swap one of their own teams for an unpicked team with /swap. */
+  allowSwaps: boolean;
 }
 
 export interface Participant {

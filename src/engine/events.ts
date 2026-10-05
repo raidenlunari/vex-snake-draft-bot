@@ -49,6 +49,7 @@ export type DraftEvent =
       actorId: string;
     }
   | { type: 'roster_changed'; draftId: number; summary: string; actorId: string }
+  | { type: 'team_swapped'; draftId: number; participant: ParticipantWithUsers; oldTeam: Team; newTeam: Team; slot: PickSlot | null }
   | { type: 'trade_executed'; draftId: number; trade: Trade; summary: string }
   | { type: 'trade_failed'; draftId: number; trade: Trade; reason: string }
   | { type: 'repick_opened'; draftId: number; repick: Repick; participant: ParticipantWithUsers; oldTeam: Team; slot: PickSlot | null }

@@ -24,6 +24,7 @@ export function defaultDraftConfig(timezone = 'UTC'): DraftConfig {
     maxSeatsPerUser: 1,
     maxRosterSize: null,
     requirePickConfirmation: false,
+    allowSwaps: true,
   };
 }
 
@@ -162,6 +163,7 @@ export function describeConfig(config: DraftConfig): Array<[string, string]> {
     ['After skip', config.afterSkipPolicy === 'catch_up' ? 'skipped player may pick later' : 'pick is forfeited'],
     ['Prepicks', config.allowPrepicks ? `on (${config.prepickMode === 'immediate' ? 'applied immediately' : 'applied on timeout'})` : 'off'],
     ['Pick confirmation', onOff(config.requirePickConfirmation)],
+    ['Swaps (/swap)', onOff(config.allowSwaps)],
     ['Trades', onOff(config.allowTrades)],
     ['2-for-1 trades', onOff(config.allowTwoForOne)],
     ['Future-pick trades', onOff(config.allowFuturePickTrades)],
