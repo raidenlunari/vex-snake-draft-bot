@@ -27,6 +27,8 @@ import { defer, send, sendText } from '../respond.js';
 import { auditEmbed, configEmbed, importSummaryEmbed, orderEmbed, participantsEmbed, seatName, teamEmbed, tradeEmbed, tradeButtons, tradeMentions } from '../views/index.js';
 import { fetchAttachmentText } from '../util/attachments.js';
 import { describeResolution } from './trade.js';
+import { parseSpreadsheetId } from '../../integrations/googleSheets.js';
+import { describeSheet } from '../../services/sheetSync.js';
 
 const onOff = (b: boolean): string => (b ? 'enabled' : 'disabled');
 
@@ -61,6 +63,21 @@ const data = new SlashCommandBuilder()
           .addStringOption((o) => o.setName('post-title').setDescription('When a forum is chosen: title of the new post to create').setMaxLength(100)),
       )
       .addSubcommand((s) => s.setName('view').setDescription('Show the configured draft channel')),
+  )
+  .addSubcommandGroup((g) =>
+    g
+      .setName('sheet')
+      .setDescription('Mirror the draft to a Google Sheet')
+      .addSubcommand((s) =>
+        s
+          .setName('set')
+          .setDescription('Link a Google Sheet (share it with the bot service account first)')
+          .addStringOption((o) => o.setName('url').setDescription('Spreadsheet URL or id').setRequired(true))
+          .addStringOption((o) => o.setName('tab').setDescription('Tab name to write (default: Draft)').setMaxLength(60)),
+      )
+      .addSubcommand((s) => s.setName('sync').setDescription('Write the current draft state to the sheet now'))
+      .addSubcommand((s) => s.setName('view').setDescription('Show the linked sheet'))
+      .addSubcommand((s) => s.setName('clear').setDescription('Stop mirroring to the sheet')),
   )
   .addSubcommandGroup((g) =>
     g
@@ -376,6 +393,46 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
     await service.setChannel(draft.id, { channelId: fetched.id, kind, parentChannelId: fetched.isThread() ? (fetched.parentId ?? null) : null }, actor);
     await sendText(interaction, `📣 Draft announcements will go to <#${fetched.id}>${kind === 'forum_post' ? ' (forum post)' : kind === 'thread' ? ' (thread)' : ''}.`);
     return;
+  }
+
+  if (group === 'sheet') {
+    const draft = requireCurrentDraft(ctx, guildId);
+    const sheets = service.sheets;
+    if (sub === 'view') {
+      const err = sheets?.lastError.get(draft.id);
+      await sendText(interaction, `📊 Sheet: ${describeSheet(draft)}${sheets?.enabled ? '' : '\n⚠️ The bot has no Google service account configured (GOOGLE_SERVICE_ACCOUNT_FILE), so nothing is written.'}${err ? `\n⚠️ Last sync error: ${err}` : ''}`, { ephemeral: true });
+      return;
+    }
+    if (sub === 'clear') {
+      service.engine.setSheet(draft.id, null, actor);
+      await sendText(interaction, '✅ Google Sheet mirroring turned off.');
+      return;
+    }
+    if (!sheets?.enabled || !sheets.client) {
+      throw new DraftError('VALIDATION', 'Google Sheets sync is not configured on this bot. Set GOOGLE_SERVICE_ACCOUNT_FILE in the bot’s .env (see docs/SETUP.md).');
+    }
+    await defer(interaction);
+    if (sub === 'set') {
+      const spreadsheetId = parseSpreadsheetId(interaction.options.getString('url', true));
+      if (!spreadsheetId) throw new DraftError('VALIDATION', 'That does not look like a Google Sheets URL or id.');
+      const tab = (interaction.options.getString('tab') ?? 'Draft').trim() || 'Draft';
+      let title: string;
+      try {
+        title = (await sheets.client.describe(spreadsheetId)).title;
+      } catch (err) {
+        throw new DraftError('VALIDATION', `The bot cannot open that spreadsheet (${err instanceof Error ? err.message : String(err)}). Share it with **${sheets.client.serviceAccountEmail}** as an editor and try again.`);
+      }
+      service.engine.setSheet(draft.id, { spreadsheetId, tab }, actor);
+      await sheets.syncNow(draft.id);
+      await sendText(interaction, `✅ Mirroring to **${title}** → tab **${tab}**. The sheet updates after every pick, skip, trade and admin change.\n${describeSheet(service.repos.drafts.getById(draft.id)!)}`);
+      return;
+    }
+    if (sub === 'sync') {
+      if (!draft.sheetSpreadsheetId) throw new DraftError('VALIDATION', 'No sheet is linked yet. Use `/draft sheet set` first.');
+      await sheets.syncNow(draft.id);
+      await sendText(interaction, `✅ Sheet updated: ${describeSheet(draft)}`);
+      return;
+    }
   }
 
   if (group === 'participant') {

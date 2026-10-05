@@ -52,6 +52,7 @@ Every admin command is validated server-side, not just hidden.
 | `/draft pick correct pick team` | Change the team at an overall pick number (history preserved). |
 | `/draft roster add / replace / drop / move` | Live roster interventions. |
 | `/draft trade approve / deny / list` | Admin approval workflow. |
+| `/draft sheet set url [tab]` / `sync` / `view` / `clear` | Mirror the draft to a Google Sheet (drafter rows with Pick 1..N, available-teams grid, status). Updated after every change. |
 | `/draft complete` | End the draft early. |
 | `/draft reset [purge]` | Wipe the draft (archive by default; `purge` deletes rows, audit kept). Requires confirmation. |
 | `/draft audit [limit]` | Recent audit events. |
@@ -67,6 +68,14 @@ Every admin command is validated server-side, not just hidden.
 | `/team number` | Availability and every owner instance with pick number, round and trade flag. |
 | `/trade propose with give receive [note]` | Propose a trade. Assets: `1234A`, `R3` (your round-3 pick), `#17` (overall pick). |
 | `/trade accept / reject / cancel / view / list` | Answer and inspect trades (buttons are posted in the draft channel too). |
+
+## Google Sheets mirror
+
+With a Google service account configured (`GOOGLE_SERVICE_ACCOUNT_FILE`), `/draft sheet set`
+links a spreadsheet and the bot rewrites one tab after every pick, skip, trade and admin
+change: a row per drafter with `Pick 1 … Pick N`, the available-team grid, picks per team
+and the current status. The sheet is a read-only mirror; the bot remains the source of truth.
+Setup steps are in [docs/SETUP.md](docs/SETUP.md#7-google-sheets-mirror-optional).
 
 ## How the draft runs
 

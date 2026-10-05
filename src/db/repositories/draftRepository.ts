@@ -103,6 +103,10 @@ export class DraftRepository {
       .run(turn.currentSlotId, turn.turnToken, turn.turnStartedAt, turn.turnDeadlineAt, draftId);
   }
 
+  setSheet(draftId: number, spreadsheetId: string | null, tab: string | null): void {
+    this.db.prepare('UPDATE drafts SET sheet_spreadsheet_id = ?, sheet_tab = ?, version = version + 1 WHERE id = ?').run(spreadsheetId, tab, draftId);
+  }
+
   bumpVersion(draftId: number): void {
     this.db.prepare('UPDATE drafts SET version = version + 1 WHERE id = ?').run(draftId);
   }

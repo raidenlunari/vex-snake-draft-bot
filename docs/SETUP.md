@@ -51,6 +51,9 @@ cp .env.example .env
 | `LOG_LEVEL` | no | `trace`…`fatal`, default `info`. |
 | `LOG_PRETTY` | no | Human-readable logs for development. |
 | `DEFAULT_TIMEZONE` | no | IANA zone used for new drafts, e.g. `America/New_York`. |
+| `GOOGLE_SERVICE_ACCOUNT_FILE` | no | Service-account JSON key path; enables the Google Sheets mirror. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | no | The key JSON inline, instead of a file. |
+| `SHEET_SYNC_DEBOUNCE_MS` | no | Delay before writing after a change (default 1500). |
 
 ## 3. Database
 
@@ -143,6 +146,32 @@ skipped, failed and duplicate rows. Single teams can be added with `/draft team 
 6. `/draft randomize` → check the order → **Start draft**.
 7. Players use `/pick`, `/prepicks`, `/roster`, `/team`, `/trade`; everyone can use `/status`.
 8. Afterwards `/draft reset` archives the draft so a new one can be set up immediately.
+
+## 7. Google Sheets mirror (optional)
+
+The bot can keep a Google Sheet tab in sync with the draft (one row per drafter with
+`Pick 1 … Pick N`, the available-team grid, picks per team and the current status).
+
+1. In [Google Cloud Console](https://console.cloud.google.com/) create (or pick) a project,
+   enable the **Google Sheets API**, then create a **Service account** (IAM & Admin →
+   Service Accounts → Create). No roles are needed.
+2. Open the service account → **Keys → Add key → JSON** and download the key file.
+3. Put it next to the bot (for example `./secrets/google-service-account.json`, never commit
+   it) and set in `.env`:
+
+   ```
+   GOOGLE_SERVICE_ACCOUNT_FILE=./secrets/google-service-account.json
+   ```
+
+   Alternatively paste the JSON into `GOOGLE_SERVICE_ACCOUNT_JSON`.
+4. Share the spreadsheet with the service account's email (`...@...iam.gserviceaccount.com`)
+   as an **Editor**.
+5. Restart the bot, then in Discord: `/draft sheet set url:<spreadsheet link> tab:Draft`.
+   The bot verifies access, writes the sheet immediately and keeps it updated. Use
+   `/draft sheet sync` to force a rewrite and `/draft sheet view` to see the link and the
+   last error, if any.
+
+The bot rewrites the whole tab on every change, so keep your own notes on other tabs.
 
 ## Troubleshooting
 

@@ -10,6 +10,7 @@ import type { Announcer } from './announcer.js';
 import { renderEvents } from './eventMessages.js';
 import { KeyedMutex } from './lock.js';
 import type { TurnTimerService } from './timerService.js';
+import type { SheetSyncService } from './sheetSync.js';
 
 export interface DraftServiceDeps {
   repos: Repositories;
@@ -21,6 +22,7 @@ export interface DraftServiceDeps {
   announcer: Announcer;
   logger: Logger;
   lock?: KeyedMutex;
+  sheets?: SheetSyncService;
 }
 
 /**
@@ -37,6 +39,7 @@ export class DraftService {
   readonly timers: TurnTimerService;
   readonly announcer: Announcer;
   readonly logger: Logger;
+  readonly sheets: SheetSyncService | null;
   private readonly lock: KeyedMutex;
 
   constructor(deps: DraftServiceDeps) {
@@ -49,6 +52,12 @@ export class DraftService {
     this.announcer = deps.announcer;
     this.logger = deps.logger;
     this.lock = deps.lock ?? new KeyedMutex();
+    this.sheets = deps.sheets ?? null;
+  }
+
+  /** Marks the draft changed for the (optional) Google Sheet mirror. */
+  touch(draftId: number): void {
+    this.sheets?.schedule(draftId);
   }
 
   // --- lifecycle -------------------------------------------------------------
@@ -72,10 +81,9 @@ export class DraftService {
   async updateConfig(draftId: number, patch: Partial<DraftConfig>, actor: Actor): Promise<{ before: DraftConfig; after: DraftConfig }> {
     return this.lock.run(this.key(draftId), async () => {
       const result = this.engine.updateConfig(draftId, patch, actor);
-      // Timer settings may have changed; the running turn keeps its deadline, but a
-      // disabled timer must be disarmed.
       const draft = this.repos.drafts.getById(draftId);
       if (draft) this.timers.syncFromDraft(draft);
+      this.touch(draftId);
       return result;
     });
   }
@@ -85,7 +93,11 @@ export class DraftService {
   }
 
   async importTeams(draftId: number, csv: string, actor: Actor, mode: ImportMode): Promise<ImportSummary> {
-    return this.lock.run(this.key(draftId), async () => this.importer.importTeams(draftId, csv, actor, mode));
+    return this.lock.run(this.key(draftId), async () => {
+      const summary = this.importer.importTeams(draftId, csv, actor, mode);
+      this.touch(draftId);
+      return summary;
+    });
   }
 
   // --- picks -----------------------------------------------------------------
@@ -129,12 +141,17 @@ export class DraftService {
           { type: 'roster_changed', draftId, summary: `${result.team.teamNumber} was removed from the draft and dropped from ${result.droppedFrom.map((p) => p.label).join(', ')}`, actorId: actor.id },
         ]);
       }
+      this.touch(draftId);
       return result;
     });
   }
 
   async restoreTeam(draftId: number, teamId: number, actor: Actor): Promise<ReturnType<DraftEngine['restoreTeam']>> {
-    return this.lock.run(this.key(draftId), async () => this.engine.restoreTeam(draftId, teamId, actor));
+    return this.lock.run(this.key(draftId), async () => {
+      const team = this.engine.restoreTeam(draftId, teamId, actor);
+      this.touch(draftId);
+      return team;
+    });
   }
 
   // --- trades ----------------------------------------------------------------
@@ -143,6 +160,7 @@ export class DraftService {
     return this.lock.run(this.key(draftId), async () => {
       const { view, events, failure } = this.trades.propose(draftId, input);
       await this.announceEvents(draftId, events);
+      if (view.trade.status === 'executed') this.touch(draftId);
       return { view, failure };
     });
   }
@@ -151,6 +169,7 @@ export class DraftService {
     return this.lock.run(this.key(draftId), async () => {
       const result = this.trades.respond(draftId, tradeId, accept, actor);
       await this.announceEvents(draftId, result.events);
+      if (result.executed) this.touch(draftId);
       return result;
     });
   }
@@ -159,6 +178,7 @@ export class DraftService {
     return this.lock.run(this.key(draftId), async () => {
       const result = this.trades.adminResolve(draftId, tradeId, approve, actor);
       await this.announceEvents(draftId, result.events);
+      if (result.executed) this.touch(draftId);
       return result;
     });
   }
@@ -191,6 +211,7 @@ export class DraftService {
     const draft = this.repos.drafts.getById(draftId);
     if (draft) this.timers.syncFromDraft(draft);
     await this.announceEvents(draftId, events);
+    this.touch(draftId);
   }
 
   private async announceEvents(draftId: number, events: DraftEvent[]): Promise<void> {

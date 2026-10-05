@@ -179,6 +179,24 @@ export class DraftEngine {
     });
   }
 
+  setSheet(draftId: number, sheet: { spreadsheetId: string; tab: string } | null, actor: Actor): Draft {
+    return this.tx(() => {
+      const ctx = loadContext(this.repos, draftId);
+      this.repos.drafts.setSheet(draftId, sheet?.spreadsheetId ?? null, sheet?.tab ?? null);
+      this.audit(
+        ctx.draft.guildId,
+        draftId,
+        'sheet_changed',
+        actor,
+        sheet ? `Google Sheet sync set to ${sheet.spreadsheetId} (tab "${sheet.tab}")` : 'Google Sheet sync cleared',
+        undefined,
+        { spreadsheetId: ctx.draft.sheetSpreadsheetId, tab: ctx.draft.sheetTab },
+        sheet,
+      );
+      return this.repos.drafts.getById(draftId) as Draft;
+    });
+  }
+
   setAdminRole(guildId: string, roleId: string | null, actor: Actor): void {
     this.tx(() => {
       const before = this.repos.drafts.getGuildSettings(guildId);

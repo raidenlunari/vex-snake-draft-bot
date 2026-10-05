@@ -226,6 +226,14 @@ CREATE INDEX audit_events_draft ON audit_events(draft_id, id);
 CREATE INDEX audit_events_guild ON audit_events(guild_id, id);
 `,
   },
+  {
+    id: 2,
+    name: 'google sheet sync settings',
+    sql: `
+ALTER TABLE drafts ADD COLUMN sheet_spreadsheet_id TEXT;
+ALTER TABLE drafts ADD COLUMN sheet_tab TEXT;
+`,
+  },
 ];
 
 export function runMigrations(db: Database): number {

@@ -13,6 +13,8 @@ import { TradeEngine } from './engine/tradeEngine.js';
 import { createLogger } from './logging/logger.js';
 import { DraftService } from './services/draftService.js';
 import { TurnTimerService } from './services/timerService.js';
+import { SheetSyncService } from './services/sheetSync.js';
+import { GoogleSheetsClient, loadServiceAccountKey } from './integrations/googleSheets.js';
 import { systemClock } from './util/clock.js';
 import { secureRandom } from './util/random.js';
 
@@ -37,6 +39,20 @@ async function main(): Promise<void> {
     },
   });
 
+  let sheetsClient: GoogleSheetsClient | null = null;
+  try {
+    const key = loadServiceAccountKey({ file: env.GOOGLE_SERVICE_ACCOUNT_FILE, json: env.GOOGLE_SERVICE_ACCOUNT_JSON });
+    if (key) {
+      sheetsClient = new GoogleSheetsClient(key);
+      logger.info({ serviceAccount: key.client_email }, 'google sheets sync enabled');
+    } else {
+      logger.info('google sheets sync disabled (no service account configured)');
+    }
+  } catch (err) {
+    logger.error({ err }, 'could not load the Google service account key; sheet sync disabled');
+  }
+  const sheets = new SheetSyncService({ client: sheetsClient, repos, engine, logger, debounceMs: env.SHEET_SYNC_DEBOUNCE_MS });
+
   const client = createClient();
   const announcer = new DiscordAnnouncer(client, logger);
   const service = new DraftService({
@@ -48,6 +64,7 @@ async function main(): Promise<void> {
     timers,
     announcer,
     logger,
+    sheets,
   });
   const bootstrap = createBot({ client, env, logger, service });
 
@@ -68,6 +85,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: string): void => {
     logger.info({ signal }, 'shutting down');
     timers.stop();
+    sheets.stop();
     bootstrap.client.destroy();
     try {
       db.close();

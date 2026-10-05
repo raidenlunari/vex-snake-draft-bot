@@ -13,6 +13,11 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
   LOG_PRETTY: boolish.default(false),
   DEFAULT_TIMEZONE: z.string().default('UTC'),
+  /** Path to a Google service-account JSON key; enables Google Sheets sync. */
+  GOOGLE_SERVICE_ACCOUNT_FILE: z.string().optional().transform((v) => (v && v.trim() ? v.trim() : undefined)),
+  /** Alternatively the JSON key itself (useful for container secrets). */
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional().transform((v) => (v && v.trim() ? v.trim() : undefined)),
+  SHEET_SYNC_DEBOUNCE_MS: z.coerce.number().int().min(0).default(1500),
 });
 
 export type Env = z.infer<typeof schema>;

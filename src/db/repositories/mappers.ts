@@ -40,6 +40,8 @@ export function mapDraft(r: Row): Draft {
     turnToken: r.turn_token ?? null,
     turnStartedAt: r.turn_started_at ?? null,
     turnDeadlineAt: r.turn_deadline_at ?? null,
+    sheetSpreadsheetId: r.sheet_spreadsheet_id ?? null,
+    sheetTab: r.sheet_tab ?? null,
     version: r.version,
   };
 }

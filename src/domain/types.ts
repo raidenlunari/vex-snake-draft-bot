@@ -36,6 +36,8 @@ export interface Draft {
   turnToken: string | null;
   turnStartedAt: string | null;
   turnDeadlineAt: string | null;
+  sheetSpreadsheetId: string | null;
+  sheetTab: string | null;
   version: number;
 }
 
