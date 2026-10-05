@@ -147,6 +147,18 @@ skipped, failed and duplicate rows. Single teams can be added with `/draft team 
 7. Players use `/pick`, `/prepicks`, `/roster`, `/team`, `/trade`; everyone can use `/status`.
 8. Afterwards `/draft reset` archives the draft so a new one can be set up immediately.
 
+## Late joiners and repicks
+
+* **Someone joins a team late:** `/draft participant add user:@newperson seat:<team>`.
+  This works during setup, the live draft and after completion; the person can act for the
+  team immediately.
+* **A drafted team no-shows:** an admin runs `/draft repick start participant:<seat> team:<number> reason:no-show`.
+  The team leaves the roster and the pool, and the drafter is pinged to choose a
+  replacement with `/pick` (or `/repick choose`). The choice is posted with
+  **Approve / Deny** buttons; only admins can approve, and a denied choice sends the
+  drafter back to pick again. The replacement keeps the original pick number and round.
+  `/draft repick cancel` abandons the repick and, by default, restores the original team.
+
 ## 7. Google Sheets mirror (optional)
 
 The bot can keep a Google Sheet tab in sync with the draft (one row per drafter with

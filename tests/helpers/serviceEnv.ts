@@ -1,6 +1,7 @@
 import { CsvImporter } from '../../src/engine/csvImport.js';
 import { DraftEngine } from '../../src/engine/draftEngine.js';
 import { PrepickService } from '../../src/engine/prepickService.js';
+import { RepickEngine } from '../../src/engine/repickEngine.js';
 import { TradeEngine } from '../../src/engine/tradeEngine.js';
 import { silentLogger } from '../../src/logging/logger.js';
 import { RecordingAnnouncer } from '../../src/services/announcer.js';
@@ -72,6 +73,7 @@ export function createServiceEnv(dbPath = ':memory:', clock = new FakeClock()): 
     engine,
     trades: new TradeEngine(repos, clock),
     prepicks: new PrepickService(repos, clock),
+    repicks: new RepickEngine(repos, clock),
     importer: new CsvImporter(repos, clock),
     timers,
     announcer,

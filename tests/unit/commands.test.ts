@@ -49,10 +49,10 @@ describe('slash command definitions', () => {
   });
 
   it('exposes the expected command surface', () => {
-    expect(commands.map((c) => c.data.name).sort()).toEqual(['draft', 'pick', 'prepicks', 'roster', 'status', 'team', 'trade']);
+    expect(commands.map((c) => c.data.name).sort()).toEqual(['draft', 'pick', 'prepicks', 'repick', 'roster', 'status', 'team', 'trade']);
     const draft = commands.find((c) => c.data.name === 'draft')!;
     const top = (draft.data.options ?? []).map((o) => o.name).sort();
-    expect(top).toEqual(['audit', 'channel', 'complete', 'config', 'import', 'participant', 'pick', 'randomize', 'reset', 'roster', 'setup', 'sheet', 'skip', 'start', 'team', 'trade']);
+    expect(top).toEqual(['audit', 'channel', 'complete', 'config', 'import', 'participant', 'pick', 'randomize', 'repick', 'reset', 'roster', 'setup', 'sheet', 'skip', 'start', 'team', 'trade']);
     // admin command hidden by default from members without Manage Server
     expect(draft.data.default_member_permissions).toBe(String(1 << 5));
   });

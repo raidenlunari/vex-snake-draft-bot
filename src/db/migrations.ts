@@ -234,6 +234,31 @@ ALTER TABLE drafts ADD COLUMN sheet_spreadsheet_id TEXT;
 ALTER TABLE drafts ADD COLUMN sheet_tab TEXT;
 `,
   },
+  {
+    id: 3,
+    name: 'repicks',
+    sql: `
+CREATE TABLE repicks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  draft_id INTEGER NOT NULL REFERENCES drafts(id) ON DELETE CASCADE,
+  participant_id INTEGER NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  asset_id INTEGER NOT NULL REFERENCES draft_assets(id) ON DELETE CASCADE,
+  old_team_id INTEGER NOT NULL REFERENCES teams(id),
+  pick_slot_id INTEGER REFERENCES pick_slots(id),
+  status TEXT NOT NULL CHECK (status IN ('open','proposed','approved','cancelled')),
+  proposed_team_id INTEGER REFERENCES teams(id),
+  reason TEXT,
+  opened_by TEXT NOT NULL,
+  opened_at TEXT NOT NULL,
+  proposed_by TEXT,
+  proposed_at TEXT,
+  resolved_by TEXT,
+  resolved_at TEXT,
+  resolution_note TEXT
+);
+CREATE INDEX repicks_draft_status ON repicks(draft_id, status);
+`,
+  },
 ];
 
 export function runMigrations(db: Database): number {

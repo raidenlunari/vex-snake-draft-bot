@@ -1,4 +1,4 @@
-import type { DraftPick, ParticipantWithUsers, PickKind, PickSlot, Team, Trade } from '../domain/types.js';
+import type { DraftPick, ParticipantWithUsers, PickKind, PickSlot, Repick, Team, Trade } from '../domain/types.js';
 
 /**
  * Events produced by engine operations. They describe what happened inside the
@@ -48,4 +48,9 @@ export type DraftEvent =
     }
   | { type: 'roster_changed'; draftId: number; summary: string; actorId: string }
   | { type: 'trade_executed'; draftId: number; trade: Trade; summary: string }
-  | { type: 'trade_failed'; draftId: number; trade: Trade; reason: string };
+  | { type: 'trade_failed'; draftId: number; trade: Trade; reason: string }
+  | { type: 'repick_opened'; draftId: number; repick: Repick; participant: ParticipantWithUsers; oldTeam: Team; slot: PickSlot | null }
+  | { type: 'repick_proposed'; draftId: number; repick: Repick; participant: ParticipantWithUsers; oldTeam: Team; newTeam: Team; slot: PickSlot | null }
+  | { type: 'repick_completed'; draftId: number; repick: Repick; participant: ParticipantWithUsers; oldTeam: Team; newTeam: Team; slot: PickSlot | null }
+  | { type: 'repick_denied'; draftId: number; repick: Repick; participant: ParticipantWithUsers; team: Team; note: string | null }
+  | { type: 'repick_cancelled'; draftId: number; repick: Repick; participant: ParticipantWithUsers; oldTeam: Team; restored: boolean };

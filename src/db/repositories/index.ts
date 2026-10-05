@@ -5,6 +5,7 @@ import { DraftRepository } from './draftRepository.js';
 import { ParticipantRepository } from './participantRepository.js';
 import { PickRepository } from './pickRepository.js';
 import { PrepickRepository } from './prepickRepository.js';
+import { RepickRepository } from './repickRepository.js';
 import { SlotRepository } from './slotRepository.js';
 import { TeamRepository } from './teamRepository.js';
 import { TradeRepository } from './tradeRepository.js';
@@ -18,6 +19,7 @@ export interface Repositories {
   assets: AssetRepository;
   picks: PickRepository;
   prepicks: PrepickRepository;
+  repicks: RepickRepository;
   trades: TradeRepository;
   audit: AuditRepository;
 }
@@ -32,9 +34,10 @@ export function createRepositories(db: SqliteDatabase): Repositories {
     assets: new AssetRepository(db),
     picks: new PickRepository(db),
     prepicks: new PrepickRepository(db),
+    repicks: new RepickRepository(db),
     trades: new TradeRepository(db),
     audit: new AuditRepository(db),
   };
 }
 
-export { AssetRepository, AuditRepository, DraftRepository, ParticipantRepository, PickRepository, PrepickRepository, SlotRepository, TeamRepository, TradeRepository };
+export { AssetRepository, AuditRepository, DraftRepository, ParticipantRepository, PickRepository, PrepickRepository, RepickRepository, SlotRepository, TeamRepository, TradeRepository };

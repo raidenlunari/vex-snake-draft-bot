@@ -4,7 +4,7 @@ import { Colors } from '../../services/announcer.js';
 import type { BotContext, ComponentHandler } from '../context.js';
 import { actorFor, isDraftAdmin, requireAdmin, requireCurrentDraft, requireOpenDraft, resolveUserSeat } from '../permissions.js';
 import { defer, send, updateMessage } from '../respond.js';
-import { fullOrderEmbed, orderEmbed, prepicksEmbed, rosterEmbed, allRostersEmbed, seatName, statusButtons, statusEmbed, tradeEmbed } from '../views/index.js';
+import { fullOrderEmbed, orderEmbed, prepicksEmbed, repickEmbed, rosterEmbed, allRostersEmbed, seatName, statusButtons, statusEmbed, tradeEmbed } from '../views/index.js';
 import { refreshTradeMessage } from '../commands/draft.js';
 import { describeResolution } from '../commands/trade.js';
 
@@ -197,7 +197,24 @@ const viewHandler: ComponentHandler = {
   },
 };
 
-export const componentHandlers: ComponentHandler[] = [pickHandler, startHandler, completeHandler, resetHandler, tradeHandler, viewHandler];
+const repickHandler: ComponentHandler = {
+  namespace: 'repick',
+  async execute(interaction, args, ctx) {
+    const actor = requireAdmin(interaction, ctx);
+    const [action] = args;
+    const draftId = requireDraftId(ctx, interaction, args[1]);
+    const repickId = num(args[2], 'repick id');
+    if (action !== 'approve' && action !== 'deny') throw new DraftError('VALIDATION', 'Unknown repick action.');
+    await defer(interaction, true);
+    const view = await ctx.service.resolveRepick(draftId, repickId, action === 'approve', null, actor);
+    await send(interaction, { content: action === 'approve' ? `✅ Repick #${repickId} approved.` : `❌ Repick #${repickId} denied; the drafter can choose again.`, embeds: [repickEmbed(view)] });
+    if (isComponent(interaction)) {
+      await interaction.message.edit({ components: [] }).catch(() => undefined);
+    }
+  },
+};
+
+export const componentHandlers: ComponentHandler[] = [pickHandler, startHandler, completeHandler, resetHandler, tradeHandler, viewHandler, repickHandler];
 
 /** Small helper used by status replies elsewhere. */
 export function describeTurn(ctx: BotContext, draftId: number): string {

@@ -24,7 +24,7 @@ import {
   teamChoices,
 } from '../permissions.js';
 import { defer, send, sendText } from '../respond.js';
-import { auditEmbed, configEmbed, importSummaryEmbed, orderEmbed, participantsEmbed, seatName, teamEmbed, tradeEmbed, tradeButtons, tradeMentions } from '../views/index.js';
+import { auditEmbed, configEmbed, importSummaryEmbed, orderEmbed, participantsEmbed, repickEmbed, seatName, teamEmbed, tradeEmbed, tradeButtons, tradeMentions } from '../views/index.js';
 import { fetchAttachmentText } from '../util/attachments.js';
 import { describeResolution } from './trade.js';
 import { parseSpreadsheetId } from '../../integrations/googleSheets.js';
@@ -219,6 +219,23 @@ const data = new SlashCommandBuilder()
           .addIntegerOption((o) => o.setName('pick').setDescription('Overall pick number').setRequired(true).setMinValue(1))
           .addStringOption((o) => o.setName('team').setDescription('Correct team').setRequired(true).setAutocomplete(true)),
       ),
+  )
+  .addSubcommandGroup((g) =>
+    g
+      .setName('repick')
+      .setDescription('Replace a team that no-showed (drafter chooses, admin approves)')
+      .addSubcommand((s) =>
+        s
+          .setName('start')
+          .setDescription('Open a repick: removes the team and lets the drafter choose a replacement')
+          .addStringOption((o) => o.setName('participant').setDescription('Seat holding the team').setRequired(true).setAutocomplete(true))
+          .addStringOption((o) => o.setName('team').setDescription('Team that is out').setRequired(true).setAutocomplete(true))
+          .addStringOption((o) => o.setName('reason').setDescription('e.g. no-show').setMaxLength(200)),
+      )
+      .addSubcommand((s) => s.setName('approve').setDescription('Approve the chosen replacement').addIntegerOption((o) => o.setName('id').setDescription('Repick id').setRequired(true)).addStringOption((o) => o.setName('note').setDescription('Note').setMaxLength(200)))
+      .addSubcommand((s) => s.setName('deny').setDescription('Deny the chosen replacement; the drafter picks again').addIntegerOption((o) => o.setName('id').setDescription('Repick id').setRequired(true)).addStringOption((o) => o.setName('note').setDescription('Why').setMaxLength(200)))
+      .addSubcommand((s) => s.setName('cancel').setDescription('Cancel a repick').addIntegerOption((o) => o.setName('id').setDescription('Repick id').setRequired(true)).addBooleanOption((o) => o.setName('restore').setDescription('Put the original team back (default: yes)')))
+      .addSubcommand((s) => s.setName('list').setDescription('List open repicks')),
   )
   .addSubcommandGroup((g) =>
     g
@@ -711,6 +728,34 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
     }
   }
 
+  if (group === 'repick') {
+    const draft = requireCurrentDraft(ctx, guildId);
+    if (sub === 'list') {
+      const open = service.repicks.listOpen(draft.id);
+      await send(interaction, { content: open.length ? `${open.length} open repick(s):` : 'No open repicks.', embeds: open.slice(0, 10).map(repickEmbed) }, { ephemeral: true });
+      return;
+    }
+    await defer(interaction);
+    if (sub === 'start') {
+      const p = resolveParticipantRef(ctx, draft, interaction.options.getString('participant', true));
+      const team = teamOrThrow(ctx, draft.id, interaction.options.getString('team', true));
+      const view = await service.openRepick(draft.id, p.id, team.id, interaction.options.getString('reason'), actor);
+      await send(interaction, { content: `🔁 Repick #${view.repick.id} opened. ${seatName(p)} can now choose a replacement for **${team.teamNumber}** with \`/pick\`.`, embeds: [repickEmbed(view)] });
+      return;
+    }
+    const id = interaction.options.getInteger('id', true);
+    if (sub === 'approve' || sub === 'deny') {
+      const view = await service.resolveRepick(draft.id, id, sub === 'approve', interaction.options.getString('note'), actor);
+      await send(interaction, { content: sub === 'approve' ? `✅ Repick #${id} approved.` : `❌ Repick #${id} denied; the drafter can choose again.`, embeds: [repickEmbed(view)] });
+      return;
+    }
+    if (sub === 'cancel') {
+      const view = await service.cancelRepick(draft.id, id, interaction.options.getBoolean('restore') ?? true, actor);
+      await send(interaction, { content: `🚫 Repick #${id} cancelled.`, embeds: [repickEmbed(view)] });
+      return;
+    }
+  }
+
   if (group === 'trade') {
     const draft = requireCurrentDraft(ctx, guildId);
     const config = repos.drafts.getConfig(draft.id);
@@ -758,7 +803,7 @@ async function autocomplete(interaction: AutocompleteInteraction<'cached'>, ctx:
   if (focused.name === 'team' || focused.name === 'new-team' || focused.name === 'old-team') {
     if (group === 'team' && sub === 'restore') return respondAutocomplete(interaction, teamChoices(ctx, draft, q, 'removed'));
     if (group === 'team' && sub === 'remove') return respondAutocomplete(interaction, teamChoices(ctx, draft, q, 'all'));
-    if ((group === 'roster' && (sub === 'drop' || sub === 'move')) || focused.name === 'old-team') {
+    if ((group === 'roster' && (sub === 'drop' || sub === 'move')) || (group === 'repick' && sub === 'start') || focused.name === 'old-team') {
       const ref = interaction.options.getString(sub === 'move' ? 'from' : 'participant');
       if (ref) {
         try {

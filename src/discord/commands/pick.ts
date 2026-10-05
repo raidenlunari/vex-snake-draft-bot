@@ -4,7 +4,7 @@ import type { ParticipantWithUsers } from '../../domain/types.js';
 import { normalizeTeamNumber } from '../../engine/draftEngine.js';
 import { Colors } from '../../services/announcer.js';
 import { customId, type BotContext, type Command } from '../context.js';
-import { actorFor, participantChoices, requireActiveDraft, resolveParticipantRef, respondAutocomplete, teamChoices } from '../permissions.js';
+import { actorFor, participantChoices, requireActiveDraft, requireCurrentDraft, resolveParticipantRef, respondAutocomplete, teamChoices } from '../permissions.js';
 import { defer, send, sendText } from '../respond.js';
 import { seatName, teamLabel } from '../views/index.js';
 
@@ -40,11 +40,29 @@ export function resolvePickingSeat(ctx: BotContext, draftId: number, userId: str
 }
 
 async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: BotContext): Promise<void> {
-  const draft = requireActiveDraft(ctx, interaction.guildId);
+  const draft = requireCurrentDraft(ctx, interaction.guildId);
+  if (draft.status !== 'active' && ctx.service.repicks.openForUser(draft.id, interaction.user.id).length === 0) {
+    requireActiveDraft(ctx, interaction.guildId);
+  }
   const teamNumber = normalizeTeamNumber(interaction.options.getString('team', true));
   const team = ctx.service.repos.teams.getByNumber(draft.id, teamNumber);
   if (!team) throw new DraftError('TEAM_NOT_FOUND', `Team ${teamNumber} is not in this draft. Check the number or use the autocomplete list.`);
-  const seat = resolvePickingSeat(ctx, draft.id, interaction.user.id, interaction.options.getString('seat'));
+  // An open repick for one of the user's seats takes precedence when it is not their turn.
+  const turn = ctx.service.engine.currentTurn(draft.id);
+  const myTurnSeat = turn && ctx.service.repos.participants.isMember(turn.owner.id, interaction.user.id) ? turn.owner : null;
+  const seatOption = interaction.options.getString('seat');
+  if (!myTurnSeat && !seatOption) {
+    const repicks = ctx.service.repicks.openForUser(draft.id, interaction.user.id);
+    if (repicks.length > 1) throw new DraftError('VALIDATION', `You have several open repicks (${repicks.map((r) => `#${r.repick.id} for ${r.participant.label}`).join(', ')}). Use \`/repick choose\` with the id.`);
+    const open = repicks[0];
+    if (open) {
+      await defer(interaction, true);
+      const view = await ctx.service.proposeRepick(draft.id, open.repick.id, team.id, actorFor(interaction, ctx));
+      await sendText(interaction, `🔁 You chose **${team.teamNumber}** to replace ${view.oldTeam.teamNumber} (repick #${view.repick.id}). An admin needs to approve it; you can change your choice with \`/pick\` until then.`);
+      return;
+    }
+  }
+  const seat = resolvePickingSeat(ctx, draft.id, interaction.user.id, seatOption);
   const config = ctx.service.repos.drafts.getConfig(draft.id);
   // Early, friendly availability check (the engine re-validates inside the transaction).
   const info = ctx.service.engine.getTeamInfo(draft.id, team.id);
@@ -81,7 +99,7 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
 }
 
 async function autocomplete(interaction: AutocompleteInteraction<'cached'>, ctx: BotContext): Promise<void> {
-  const draft = ctx.service.repos.drafts.getOpenForGuild(interaction.guildId);
+  const draft = ctx.service.repos.drafts.getCurrentForGuild(interaction.guildId);
   if (!draft) return respondAutocomplete(interaction, []);
   const focused = interaction.options.getFocused(true);
   if (focused.name === 'seat') {

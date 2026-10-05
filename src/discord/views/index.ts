@@ -4,6 +4,7 @@ import type { AuditEvent, Draft, DraftConfig, ParticipantWithUsers, Team } from 
 import type { ImportSummary } from '../../engine/csvImport.js';
 import { mentionSeat, type DraftEngine, type DraftStateView, type RosterView, type StartValidation, type TeamInfoView } from '../../engine/draftEngine.js';
 import type { PrepickEntry } from '../../engine/prepickService.js';
+import type { RepickView } from '../../engine/repickEngine.js';
 import type { TradeView } from '../../engine/tradeEngine.js';
 import { Colors, type ButtonSpec, type EmbedPayload } from '../../services/announcer.js';
 import { discordTimestamp } from '../../services/eventMessages.js';
@@ -288,4 +289,27 @@ export function timerSummary(config: DraftConfig): string {
   if (!config.skipTimerSeconds) return 'off';
   const hours = config.skipHoursStart && config.skipHoursEnd ? ` during ${config.skipHoursStart}–${config.skipHoursEnd} ${config.timezone}` : '';
   return `${formatDuration(config.skipTimerSeconds)}${hours}`;
+}
+
+export function repickEmbed(view: RepickView): EmbedPayload {
+  const { repick } = view;
+  const status: Record<string, string> = {
+    open: '⏳ Waiting for the drafter to choose a replacement (`/pick`)',
+    proposed: '🛡️ Replacement chosen — waiting for admin approval',
+    approved: '✅ Approved',
+    cancelled: '🚫 Cancelled',
+  };
+  return {
+    title: `Repick #${repick.id} — ${view.participant.label}`,
+    description: [
+      status[repick.status] ?? repick.status,
+      `**Out:** ${teamLabel(view.oldTeam)}${view.slot ? ` (pick #${view.slot.overallPick}, R${view.slot.round})` : ''}`,
+      view.proposedTeam ? `**Proposed:** ${teamLabel(view.proposedTeam)}` : '',
+      repick.reason ? `**Reason:** ${repick.reason}` : '',
+      repick.resolutionNote ? `_${repick.resolutionNote}_` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+    color: repick.status === 'approved' ? Colors.success : repick.status === 'cancelled' ? Colors.danger : Colors.warning,
+  };
 }

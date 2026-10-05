@@ -10,6 +10,7 @@ import type {
   ParticipantUser,
   PickSlot,
   Prepick,
+  Repick,
   Team,
   Trade,
   TradeAsset,
@@ -257,4 +258,25 @@ export function mapAudit(r: Row): AuditEvent {
 
 export function mapGuildSettings(r: Row): GuildSettings {
   return { guildId: r.guild_id, adminRoleId: r.admin_role_id ?? null, updatedAt: r.updated_at };
+}
+
+export function mapRepick(r: Row): Repick {
+  return {
+    id: r.id,
+    draftId: r.draft_id,
+    participantId: r.participant_id,
+    assetId: r.asset_id,
+    oldTeamId: r.old_team_id,
+    pickSlotId: num(r.pick_slot_id),
+    status: r.status,
+    proposedTeamId: num(r.proposed_team_id),
+    reason: r.reason ?? null,
+    openedBy: r.opened_by,
+    openedAt: r.opened_at,
+    proposedBy: r.proposed_by ?? null,
+    proposedAt: r.proposed_at ?? null,
+    resolvedBy: r.resolved_by ?? null,
+    resolvedAt: r.resolved_at ?? null,
+    resolutionNote: r.resolution_note ?? null,
+  };
 }

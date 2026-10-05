@@ -4,6 +4,7 @@ import type { DraftConfig, ParticipantWithUsers, Team } from '../../src/domain/t
 import { CsvImporter } from '../../src/engine/csvImport.js';
 import { DraftEngine } from '../../src/engine/draftEngine.js';
 import { PrepickService } from '../../src/engine/prepickService.js';
+import { RepickEngine } from '../../src/engine/repickEngine.js';
 import { TradeEngine } from '../../src/engine/tradeEngine.js';
 import { FakeClock } from '../../src/util/clock.js';
 import { SeededRandom } from '../../src/util/random.js';
@@ -19,6 +20,7 @@ export interface TestEnv {
   random: SeededRandom;
   engine: DraftEngine;
   prepicks: PrepickService;
+  repicks: RepickEngine;
   trades: TradeEngine;
   importer: CsvImporter;
 }
@@ -36,6 +38,7 @@ export function createTestEnv(dbPath = ':memory:'): TestEnv {
     random,
     engine,
     prepicks: new PrepickService(repos, clock),
+    repicks: new RepickEngine(repos, clock),
     trades: new TradeEngine(repos, clock),
     importer: new CsvImporter(repos, clock),
   };

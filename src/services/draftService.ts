@@ -4,6 +4,7 @@ import type { CsvImporter, ImportMode, ImportSummary } from '../engine/csvImport
 import type { DraftEngine } from '../engine/draftEngine.js';
 import type { DraftEvent } from '../engine/events.js';
 import type { PrepickService } from '../engine/prepickService.js';
+import type { RepickEngine, RepickView } from '../engine/repickEngine.js';
 import type { ProposeTradeInput, TradeEngine, TradeResolution, TradeView } from '../engine/tradeEngine.js';
 import type { Logger } from '../logging/logger.js';
 import type { Announcer } from './announcer.js';
@@ -17,6 +18,7 @@ export interface DraftServiceDeps {
   engine: DraftEngine;
   trades: TradeEngine;
   prepicks: PrepickService;
+  repicks: RepickEngine;
   importer: CsvImporter;
   timers: TurnTimerService;
   announcer: Announcer;
@@ -35,6 +37,7 @@ export class DraftService {
   readonly engine: DraftEngine;
   readonly trades: TradeEngine;
   readonly prepicks: PrepickService;
+  readonly repicks: RepickEngine;
   readonly importer: CsvImporter;
   readonly timers: TurnTimerService;
   readonly announcer: Announcer;
@@ -47,6 +50,7 @@ export class DraftService {
     this.engine = deps.engine;
     this.trades = deps.trades;
     this.prepicks = deps.prepicks;
+    this.repicks = deps.repicks;
     this.importer = deps.importer;
     this.timers = deps.timers;
     this.announcer = deps.announcer;
@@ -185,6 +189,43 @@ export class DraftService {
 
   async cancelTrade(draftId: number, tradeId: number, actor: Actor): Promise<TradeView> {
     return this.lock.run(this.key(draftId), async () => this.trades.cancel(draftId, tradeId, actor));
+  }
+
+  // --- repicks ---------------------------------------------------------------
+
+  async openRepick(draftId: number, participantId: number, teamId: number, reason: string | null, actor: Actor): Promise<RepickView> {
+    return this.lock.run(this.key(draftId), async () => {
+      const { view, events } = this.repicks.open(draftId, participantId, teamId, reason, actor);
+      await this.announceEvents(draftId, events);
+      this.touch(draftId);
+      return view;
+    });
+  }
+
+  async proposeRepick(draftId: number, repickId: number, teamId: number, actor: Actor): Promise<RepickView> {
+    return this.lock.run(this.key(draftId), async () => {
+      const { view, events } = this.repicks.propose(draftId, repickId, teamId, actor);
+      await this.announceEvents(draftId, events);
+      return view;
+    });
+  }
+
+  async resolveRepick(draftId: number, repickId: number, approve: boolean, note: string | null, actor: Actor): Promise<RepickView> {
+    return this.lock.run(this.key(draftId), async () => {
+      const { view, events } = this.repicks.resolve(draftId, repickId, approve, note, actor);
+      await this.announceEvents(draftId, events);
+      if (approve) this.touch(draftId);
+      return view;
+    });
+  }
+
+  async cancelRepick(draftId: number, repickId: number, restore: boolean, actor: Actor): Promise<RepickView> {
+    return this.lock.run(this.key(draftId), async () => {
+      const { view, events } = this.repicks.cancel(draftId, repickId, restore, actor);
+      await this.announceEvents(draftId, events);
+      this.touch(draftId);
+      return view;
+    });
   }
 
   // --- prepicks (no announcements; serialized so they cannot race a turn) ----

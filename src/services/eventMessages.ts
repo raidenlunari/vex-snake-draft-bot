@@ -84,6 +84,42 @@ export function renderEvents(events: DraftEvent[], config: DraftConfig): Announc
       case 'trade_failed':
         out.push({ content: `⚠️ Trade #${event.trade.id} could not be completed: ${event.reason}`, mentionUserIds: [] });
         break;
+      case 'repick_opened': {
+        const where = event.slot ? ` (pick #${event.slot.overallPick}, round ${event.slot.round})` : '';
+        out.push({
+          content: `🔁 **Repick #${event.repick.id} opened** for ${mentionSeat(event.participant)}: team **${event.oldTeam.teamNumber}** is out${where}${event.repick.reason ? ` — ${event.repick.reason}` : ''}.\nChoose a replacement with \`/pick\`; an admin will approve it.`,
+          mentionUserIds: userIds(event.participant),
+        });
+        break;
+      }
+      case 'repick_proposed':
+        out.push({
+          content: `🔁 **Repick #${event.repick.id}:** ${mentionSeat(event.participant)} wants **${event.newTeam.teamNumber}**${event.newTeam.teamName ? ` (${event.newTeam.teamName})` : ''} to replace ${event.oldTeam.teamNumber}${event.slot ? ` at pick #${event.slot.overallPick}` : ''}. Waiting for an admin.`,
+          buttons: [
+            { id: `repick:approve:${event.draftId}:${event.repick.id}`, label: 'Approve (admin)', style: 'success', emoji: '✅' },
+            { id: `repick:deny:${event.draftId}:${event.repick.id}`, label: 'Deny (admin)', style: 'danger', emoji: '❌' },
+          ],
+          mentionUserIds: [],
+        });
+        break;
+      case 'repick_completed':
+        out.push({
+          content: `✅ **Repick #${event.repick.id} approved:** ${mentionSeat(event.participant)} now has **${event.newTeam.teamNumber}** in place of ${event.oldTeam.teamNumber}${event.slot ? ` (pick #${event.slot.overallPick})` : ''}.`,
+          mentionUserIds: userIds(event.participant),
+        });
+        break;
+      case 'repick_denied':
+        out.push({
+          content: `❌ **Repick #${event.repick.id}:** an admin denied **${event.team.teamNumber}**${event.note ? ` — ${event.note}` : ''}. ${mentionSeat(event.participant)}, choose another team with \`/pick\`.`,
+          mentionUserIds: userIds(event.participant),
+        });
+        break;
+      case 'repick_cancelled':
+        out.push({
+          content: `🚫 **Repick #${event.repick.id} cancelled** for ${mentionSeat(event.participant)}${event.restored ? `; ${event.oldTeam.teamNumber} is back on the roster` : ''}.`,
+          mentionUserIds: userIds(event.participant),
+        });
+        break;
       default:
         break;
     }

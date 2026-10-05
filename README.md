@@ -37,7 +37,7 @@ Every admin command is validated server-side, not just hidden.
 | `/draft channel set [channel] [post-title]` | Choose the text channel, thread or forum post for announcements. Picking a **forum** creates a new post. |
 | `/draft import file:<csv> [mode]` | Import teams from CSV (column detection, duplicate/invalid reporting). |
 | `/draft team add / remove / restore / list` | Manage the team pool. `remove force:true` also drops the team from rosters. |
-| `/draft participant add user [user2…user5] [label] [seat]` | Register a participant. List several users to register them as one **team**: every member can pick, prepick and trade for it and all are pinged on its turn. With `seat`, add the users to an existing seat instead. |
+| `/draft participant add user [user2…user5] [label] [seat]` | Register a participant. List several users to register them as one **team**: every member can pick, prepick and trade for it and all are pinged on its turn. With `seat`, add the users to an existing team at any time, even mid-draft or after it (late joiners). |
 | `/draft participant remove seat [user]` | Remove a seat, or just one user from it. |
 | `/draft config view` | Show the full configuration. |
 | `/draft config rounds / picks-per-round / participants / snake` | Draft structure (locked once started). |
@@ -52,6 +52,8 @@ Every admin command is validated server-side, not just hidden.
 | `/draft pick correct pick team` | Change the team at an overall pick number (history preserved). |
 | `/draft roster add / replace / drop / move` | Live roster interventions. |
 | `/draft trade approve / deny / list` | Admin approval workflow. |
+| `/draft repick start participant team [reason]` | A drafted team no-showed: remove it and let the drafter choose a replacement (keeps the pick number). |
+| `/draft repick approve / deny / cancel / list` | Admins approve every repick; deny sends the drafter back to choose again. |
 | `/draft sheet set url [tab]` / `sync` / `view` / `clear` | Mirror the draft to a Google Sheet (drafter rows with Pick 1..N, available-teams grid, status). Updated after every change. |
 | `/draft complete` | End the draft early. |
 | `/draft reset [purge]` | Wipe the draft (archive by default; `purge` deletes rows, audit kept). Requires confirmation. |
@@ -62,7 +64,8 @@ Every admin command is validated server-side, not just hidden.
 | Command | Purpose |
 | --- | --- |
 | `/status` | Draft state: round, overall pick, current player, time remaining, available teams, roster count. Buttons for roster, prepicks, order. |
-| `/pick team [seat]` | Pick when it is your turn, or fill your skipped pick if the draft allows catch-ups. |
+| `/pick team [seat]` | Pick when it is your turn, fill your skipped pick (catch-up), or choose a replacement for an open repick. |
+| `/repick choose team [id]` / `view` | Choose the replacement for a repick an admin opened for your team. |
 | `/prepicks add / remove / view / reorder / clear` | Ordered auto-pick list. The bot picks the first available team when your turn comes. |
 | `/roster [user] [seat] [all]` | Rosters with pick numbers, rounds, original owners and trades. |
 | `/team number` | Availability and every owner instance with pick number, round and trade flag. |

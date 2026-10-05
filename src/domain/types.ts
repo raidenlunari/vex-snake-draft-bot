@@ -7,7 +7,8 @@ export type SlotStatus = 'pending' | 'current' | 'picked' | 'skipped' | 'forfeit
 export type AssetType = 'team' | 'pick';
 export type AssetStatus = 'active' | 'consumed' | 'dropped' | 'removed' | 'void';
 export type AcquiredVia = 'draft' | 'pick' | 'admin' | 'trade';
-export type PickKind = 'pick' | 'prepick' | 'forced' | 'catch_up' | 'admin_add' | 'correction';
+export type PickKind = 'pick' | 'prepick' | 'forced' | 'catch_up' | 'admin_add' | 'correction' | 'repick';
+export type RepickStatus = 'open' | 'proposed' | 'approved' | 'cancelled';
 export type TradeStatus =
   | 'proposed'
   | 'accepted'
@@ -224,3 +225,22 @@ export interface Actor {
 }
 
 export const SYSTEM_ACTOR: Actor = { id: 'system', kind: 'system' };
+
+export interface Repick {
+  id: number;
+  draftId: number;
+  participantId: number;
+  assetId: number;
+  oldTeamId: number;
+  pickSlotId: number | null;
+  status: RepickStatus;
+  proposedTeamId: number | null;
+  reason: string | null;
+  openedBy: string;
+  openedAt: string;
+  proposedBy: string | null;
+  proposedAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+}

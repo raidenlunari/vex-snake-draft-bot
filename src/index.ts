@@ -9,6 +9,7 @@ import { registerCommands } from './discord/registerCommands.js';
 import { CsvImporter } from './engine/csvImport.js';
 import { DraftEngine } from './engine/draftEngine.js';
 import { PrepickService } from './engine/prepickService.js';
+import { RepickEngine } from './engine/repickEngine.js';
 import { TradeEngine } from './engine/tradeEngine.js';
 import { createLogger } from './logging/logger.js';
 import { DraftService } from './services/draftService.js';
@@ -60,6 +61,7 @@ async function main(): Promise<void> {
     engine,
     trades: new TradeEngine(repos, clock),
     prepicks: new PrepickService(repos, clock),
+    repicks: new RepickEngine(repos, clock),
     importer: new CsvImporter(repos, clock),
     timers,
     announcer,

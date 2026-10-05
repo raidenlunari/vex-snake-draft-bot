@@ -249,7 +249,7 @@ export class DraftEngine {
   addUserToSeat(draftId: number, participantId: number, discordUserId: string, actor: Actor): ParticipantWithUsers {
     return this.tx(() => {
       const ctx = loadContext(this.repos, draftId);
-      requireStatus(ctx, ['setup', 'randomized', 'active'], 'Adding a user to a seat');
+      requireStatus(ctx, ['setup', 'randomized', 'active', 'completed'], 'Adding a user to a seat');
       const seat = this.requireParticipant(ctx, participantId);
       if (this.repos.participants.isMember(participantId, discordUserId)) {
         throw new DraftError('PARTICIPANT_EXISTS', `<@${discordUserId}> is already on "${seat.label}".`);
