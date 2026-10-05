@@ -69,10 +69,14 @@ const data = new SlashCommandBuilder()
       .addSubcommand((s) =>
         s
           .setName('add')
-          .setDescription('Add a Discord user as a participant (or to an existing seat)')
+          .setDescription('Add a participant; list several users to register them as one team')
           .addUserOption((o) => o.setName('user').setDescription('Discord user').setRequired(true))
-          .addStringOption((o) => o.setName('label').setDescription('Seat label (default: display name)').setMaxLength(60))
-          .addStringOption((o) => o.setName('seat').setDescription('Add the user to this existing seat instead').setAutocomplete(true)),
+          .addUserOption((o) => o.setName('user2').setDescription('Second team member'))
+          .addUserOption((o) => o.setName('user3').setDescription('Third team member'))
+          .addUserOption((o) => o.setName('user4').setDescription('Fourth team member'))
+          .addUserOption((o) => o.setName('user5').setDescription('Fifth team member'))
+          .addStringOption((o) => o.setName('label').setDescription('Seat/team label (default: display name)').setMaxLength(60))
+          .addStringOption((o) => o.setName('seat').setDescription('Add the user(s) to this existing seat instead').setAutocomplete(true)),
       )
       .addSubcommand((s) =>
         s
@@ -381,27 +385,33 @@ async function execute(interaction: ChatInputCommandInteraction<'cached'>, ctx: 
       return;
     }
     if (sub === 'add') {
-      const target = interaction.options.getUser('user', true);
+      const users = [...new Map(['user', 'user2', 'user3', 'user4', 'user5'].map((n) => interaction.options.getUser(n)).filter((u): u is NonNullable<typeof u> => !!u).map((u) => [u.id, u])).values()];
       const seatRef = interaction.options.getString('seat');
+      await defer(interaction);
       if (seatRef) {
         const seat = resolveParticipantRef(ctx, draft, seatRef);
-        const updated = service.engine.addUserToSeat(draft.id, seat.id, target.id, actor);
-        await sendText(interaction, `✅ Added <@${target.id}> to seat **${updated.label}** (${updated.users.length} user(s)).`);
+        let updated = seat;
+        for (const u of users) updated = service.engine.addUserToSeat(draft.id, seat.id, u.id, actor);
+        await sendText(interaction, `✅ Added ${users.map((u) => `<@${u.id}>`).join(', ')} to **${updated.label}** (${updated.users.length} member(s)).`);
         return;
       }
-      await defer(interaction);
-      const member = await interaction.guild.members.fetch(target.id).catch(() => null);
+      const members = await Promise.all(users.map((u) => interaction.guild.members.fetch(u.id).catch(() => null)));
+      const names = users.map((u, i) => members[i]?.displayName ?? u.username);
       const requested = interaction.options.getString('label');
-      let label = requested ?? member?.displayName ?? target.username;
+      let label = requested ?? (users.length > 1 ? names.join(' & ').slice(0, 60) : names[0]!);
       if (!requested) {
         // Auto-suffix display-name collisions so two "Alex"es can both join.
         let n = 2;
-        const base = label;
+        const base = label.slice(0, 55);
         while (repos.participants.getByLabel(draft.id, label)) label = `${base} (${n++})`;
       }
-      const created = service.engine.addParticipant(draft.id, { label, discordUserId: target.id, actor });
+      const created = service.engine.addParticipant(draft.id, { label, discordUserIds: users.map((u) => u.id), actor });
       const count = repos.participants.listByDraft(draft.id).length;
-      await sendText(interaction, `✅ Added **${created.label}** (<@${target.id}>). ${count} participant(s) registered.${draft.status === 'randomized' ? ' The order was cleared; run `/draft randomize` again.' : ''}`);
+      const kind = users.length > 1 ? 'team' : 'participant';
+      await sendText(
+        interaction,
+        `✅ Added ${kind} **${created.label}** (${users.map((u) => `<@${u.id}>`).join(', ')}). ${count} seat(s) registered.${draft.status === 'randomized' ? ' The order was cleared; run `/draft randomize` again.' : ''}`,
+      );
       return;
     }
     if (sub === 'remove') {

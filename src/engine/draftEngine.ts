@@ -187,7 +187,11 @@ export class DraftEngine {
     });
   }
 
-  addParticipant(draftId: number, input: { label: string; discordUserId: string | null; actor: Actor }): ParticipantWithUsers {
+  /**
+   * Creates a seat. With several Discord users the seat is a team: every member may
+   * pick, prepick and trade on its behalf and all of them are pinged on its turn.
+   */
+  addParticipant(draftId: number, input: { label: string; discordUserIds: string[]; actor: Actor }): ParticipantWithUsers {
     return this.tx(() => {
       const ctx = loadContext(this.repos, draftId);
       requireStatus(ctx, ['setup', 'randomized'], 'Adding a participant');
@@ -197,26 +201,28 @@ export class DraftEngine {
       if (this.repos.participants.getByLabel(draftId, label)) {
         throw new DraftError('PARTICIPANT_EXISTS', `A participant called "${label}" already exists. Choose another label or add the user to that seat.`);
       }
-      if (input.discordUserId) {
-        const seats = this.repos.participants.listSeatsForUser(draftId, input.discordUserId);
+      const userIds = [...new Set(input.discordUserIds.filter(Boolean))];
+      for (const userId of userIds) {
+        const seats = this.repos.participants.listSeatsForUser(draftId, userId);
         if (seats.length >= ctx.config.maxSeatsPerUser) {
           throw new DraftError(
             'PARTICIPANT_EXISTS',
             seats.length === 1
-              ? `<@${input.discordUserId}> is already registered as "${seats[0]?.label}". Raise "seats per user" in the config to let one person control several seats.`
-              : `<@${input.discordUserId}> already controls ${seats.length} seats, the configured maximum.`,
+              ? `<@${userId}> is already registered as "${seats[0]?.label}". Raise "seats per user" in the config to let one person control several seats.`
+              : `<@${userId}> already controls ${seats.length} seats, the configured maximum.`,
           );
         }
       }
       const now = this.clock.nowIso();
       const participant = this.repos.participants.create({ draftId, label, createdBy: input.actor.id, now });
-      if (input.discordUserId) {
-        this.repos.participants.addUser({ draftId, participantId: participant.id, discordUserId: input.discordUserId, role: 'owner', now });
+      for (const userId of userIds) {
+        this.repos.participants.addUser({ draftId, participantId: participant.id, discordUserId: userId, role: 'owner', now });
       }
       this.invalidateOrder(ctx, input.actor);
-      this.audit(ctx.draft.guildId, draftId, 'participant_added', input.actor, `Participant "${label}" added${input.discordUserId ? ` for <@${input.discordUserId}>` : ''}`, {
+      const who = userIds.map((id) => `<@${id}>`).join(', ');
+      this.audit(ctx.draft.guildId, draftId, 'participant_added', input.actor, `${userIds.length > 1 ? 'Team' : 'Participant'} "${label}" added${who ? ` for ${who}` : ''}`, {
         participantId: participant.id,
-        discordUserId: input.discordUserId,
+        discordUserIds: userIds,
       });
       return this.repos.participants.getWithUsers(participant.id) as ParticipantWithUsers;
     });
@@ -234,7 +240,7 @@ export class DraftEngine {
       if (seats.length >= ctx.config.maxSeatsPerUser) {
         throw new DraftError('PARTICIPANT_EXISTS', `<@${discordUserId}> already controls the maximum number of seats (${ctx.config.maxSeatsPerUser}).`);
       }
-      this.repos.participants.addUser({ draftId, participantId, discordUserId, role: 'manager', now: this.clock.nowIso() });
+      this.repos.participants.addUser({ draftId, participantId, discordUserId, role: 'owner', now: this.clock.nowIso() });
       this.audit(ctx.draft.guildId, draftId, 'participant_user_added', actor, `<@${discordUserId}> added to seat "${seat.label}"`, { participantId, discordUserId });
       return this.repos.participants.getWithUsers(participantId) as ParticipantWithUsers;
     });

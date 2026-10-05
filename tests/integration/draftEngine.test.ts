@@ -22,11 +22,11 @@ describe('draft setup', () => {
 
   it('enforces seats-per-user and labels', () => {
     const d = env.engine.createDraft({ guildId: 'g', name: 'Spring', actor: ADMIN });
-    env.engine.addParticipant(d.id, { label: 'Alice', discordUserId: 'u1', actor: ADMIN });
-    expect(() => env.engine.addParticipant(d.id, { label: 'Alice 2', discordUserId: 'u1', actor: ADMIN })).toThrow(/already registered/);
-    expect(() => env.engine.addParticipant(d.id, { label: 'alice', discordUserId: 'u2', actor: ADMIN })).toThrow(/already exists/);
+    env.engine.addParticipant(d.id, { label: 'Alice', discordUserIds: ['u1'], actor: ADMIN });
+    expect(() => env.engine.addParticipant(d.id, { label: 'Alice 2', discordUserIds: ['u1'], actor: ADMIN })).toThrow(/already registered/);
+    expect(() => env.engine.addParticipant(d.id, { label: 'alice', discordUserIds: ['u2'], actor: ADMIN })).toThrow(/already exists/);
     env.engine.updateConfig(d.id, { maxSeatsPerUser: 2 }, ADMIN);
-    const second = env.engine.addParticipant(d.id, { label: 'Alice 2', discordUserId: 'u1', actor: ADMIN });
+    const second = env.engine.addParticipant(d.id, { label: 'Alice 2', discordUserIds: ['u1'], actor: ADMIN });
     expect(env.repos.participants.listSeatsForUser(d.id, 'u1')).toHaveLength(2);
     // multiple users on one seat
     env.engine.addUserToSeat(d.id, second.id, 'u3', ADMIN);
@@ -39,7 +39,7 @@ describe('draft setup', () => {
     expect(ordered.map((p) => p.draftPosition)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(new Set(ordered.map((p) => p.id))).toEqual(new Set(participants.map((p) => p.id)));
     expect(env.repos.drafts.getById(draftId)?.status).toBe('randomized');
-    env.engine.addParticipant(draftId, { label: 'Late', discordUserId: 'u99', actor: ADMIN });
+    env.engine.addParticipant(draftId, { label: 'Late', discordUserIds: ['u99'], actor: ADMIN });
     expect(env.repos.drafts.getById(draftId)?.status).toBe('setup');
     expect(env.repos.participants.listByDraft(draftId).every((p) => p.draftPosition === null)).toBe(true);
   });
@@ -422,5 +422,33 @@ describe('reset', () => {
     expect(env.repos.teams.listByDraft(draftId)).toEqual([]);
     expect(env.repos.audit.countForDraft(draftId)).toBeGreaterThan(0);
     expect(env.repos.audit.listByType(draftId, 'draft_reset')).toHaveLength(1);
+  });
+});
+
+describe('team seats (several users on one participant)', () => {
+  it('registers several users as one seat and lets any member act for it', () => {
+    const env = createTestEnv();
+    const d = env.engine.createDraft({ guildId: 'g', name: 'Teams', actor: ADMIN });
+    env.engine.updateConfig(d.id, { rounds: 1 }, ADMIN);
+    env.engine.setChannel(d.id, { channelId: 'c', kind: 'text', parentChannelId: null }, ADMIN);
+    const team = env.engine.addParticipant(d.id, { label: 'Team 1234A', discordUserIds: ['t1', 't2', 't2', 't3'], actor: ADMIN });
+    expect(team.users.map((u) => u.discordUserId)).toEqual(['t1', 't2', 't3']);
+    expect(team.users.every((u) => u.role === 'owner')).toBe(true);
+    env.engine.addParticipant(d.id, { label: 'Solo', discordUserIds: ['s1'], actor: ADMIN });
+    expect(() => env.engine.addParticipant(d.id, { label: 'Dup', discordUserIds: ['x1', 't2'], actor: ADMIN })).toThrow(/already registered/);
+    for (let i = 1; i <= 3; i++) env.engine.addTeam(d.id, { teamNumber: `${i}A`, teamName: null, organization: null, location: null }, ADMIN);
+    const order = env.engine.randomize(d.id, ADMIN);
+    env.engine.start(d.id, ADMIN);
+    const first = order[0]!;
+    const member = first.id === team.id ? user('t3') : user('s1');
+    const t = teamByNumber(env, d.id, '1A');
+    env.engine.pick(d.id, { participantId: first.id, teamId: t.id, actor: member });
+    expect(env.engine.getRoster(d.id, first.id).teams).toHaveLength(1);
+    // a non-member cannot act for the team
+    const second = order[1]!;
+    expect(() => env.engine.pick(d.id, { participantId: second.id, teamId: teamByNumber(env, d.id, '2A').id, actor: user('stranger') })).toThrow(/not a member/);
+    expect(() => env.prepicks.add(d.id, team.id, teamByNumber(env, d.id, '3A').id, user('s1'))).toThrow(/not yours/);
+    env.prepicks.add(d.id, team.id, teamByNumber(env, d.id, '3A').id, user('t1'));
+    expect(env.prepicks.list(d.id, team.id)).toHaveLength(1);
   });
 });

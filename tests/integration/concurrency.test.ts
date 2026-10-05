@@ -13,8 +13,8 @@ describe('concurrent picks', () => {
     const draft = env.engine.createDraft({ guildId: 'g', name: 'C', actor: ADMIN });
     env.engine.updateConfig(draft.id, { rounds: 1, maxInstancesPerTeam: 1 }, ADMIN);
     env.engine.setChannel(draft.id, { channelId: 'c', kind: 'text', parentChannelId: null }, ADMIN);
-    const a = env.engine.addParticipant(draft.id, { label: 'A', discordUserId: 'ua', actor: ADMIN });
-    const b = env.engine.addParticipant(draft.id, { label: 'B', discordUserId: 'ub', actor: ADMIN });
+    const a = env.engine.addParticipant(draft.id, { label: 'A', discordUserIds: ['ua'], actor: ADMIN });
+    const b = env.engine.addParticipant(draft.id, { label: 'B', discordUserIds: ['ub'], actor: ADMIN });
     const team = env.engine.addTeam(draft.id, { teamNumber: '1A', teamName: null, organization: null, location: null }, ADMIN);
     env.engine.addTeam(draft.id, { teamNumber: '2A', teamName: null, organization: null, location: null }, ADMIN);
     env.engine.randomize(draft.id, ADMIN);
@@ -79,8 +79,8 @@ describe('concurrent picks', () => {
     const draft = env.engine.createDraft({ guildId: 'g', name: 'C', actor: ADMIN });
     env.engine.updateConfig(draft.id, { rounds: 1 }, ADMIN);
     env.engine.setChannel(draft.id, { channelId: 'c', kind: 'text', parentChannelId: null }, ADMIN);
-    env.engine.addParticipant(draft.id, { label: 'A', discordUserId: 'ua', actor: ADMIN });
-    env.engine.addParticipant(draft.id, { label: 'B', discordUserId: 'ub', actor: ADMIN });
+    env.engine.addParticipant(draft.id, { label: 'A', discordUserIds: ['ua'], actor: ADMIN });
+    env.engine.addParticipant(draft.id, { label: 'B', discordUserIds: ['ub'], actor: ADMIN });
     const t1 = env.engine.addTeam(draft.id, { teamNumber: '1A', teamName: null, organization: null, location: null }, ADMIN);
     const t2 = env.engine.addTeam(draft.id, { teamNumber: '2A', teamName: null, organization: null, location: null }, ADMIN);
     const order = env.engine.randomize(draft.id, ADMIN);

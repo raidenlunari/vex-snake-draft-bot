@@ -37,7 +37,7 @@ Every admin command is validated server-side, not just hidden.
 | `/draft channel set [channel] [post-title]` | Choose the text channel, thread or forum post for announcements. Picking a **forum** creates a new post. |
 | `/draft import file:<csv> [mode]` | Import teams from CSV (column detection, duplicate/invalid reporting). |
 | `/draft team add / remove / restore / list` | Manage the team pool. `remove force:true` also drops the team from rosters. |
-| `/draft participant add user [label] [seat]` | Register a Discord user; with `seat`, add them as a co-manager of an existing seat. |
+| `/draft participant add user [user2…user5] [label] [seat]` | Register a participant. List several users to register them as one **team**: every member can pick, prepick and trade for it and all are pinged on its turn. With `seat`, add the users to an existing seat instead. |
 | `/draft participant remove seat [user]` | Remove a seat, or just one user from it. |
 | `/draft config view` | Show the full configuration. |
 | `/draft config rounds / picks-per-round / participants / snake` | Draft structure (locked once started). |

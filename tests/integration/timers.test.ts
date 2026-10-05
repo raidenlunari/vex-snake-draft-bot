@@ -10,7 +10,7 @@ function makeDraft(env: ServiceEnv, config: Record<string, unknown> = {}) {
   const draft = env.engine.createDraft({ guildId: 'g', name: 'Timed', actor: ADMIN });
   env.engine.updateConfig(draft.id, { rounds: 2, skipTimerSeconds: 600, ...config }, ADMIN);
   env.engine.setChannel(draft.id, { channelId: 'c', kind: 'text', parentChannelId: null }, ADMIN);
-  for (let i = 1; i <= 3; i++) env.engine.addParticipant(draft.id, { label: `P${i}`, discordUserId: `u${i}`, actor: ADMIN });
+  for (let i = 1; i <= 3; i++) env.engine.addParticipant(draft.id, { label: `P${i}`, discordUserIds: [`u${i}`], actor: ADMIN });
   for (let i = 1; i <= 10; i++) env.engine.addTeam(draft.id, { teamNumber: `${i}A`, teamName: null, organization: null, location: null }, ADMIN);
   env.engine.randomize(draft.id, ADMIN);
   return draft.id;

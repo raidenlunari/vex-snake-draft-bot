@@ -132,8 +132,10 @@ skipped, failed and duplicate rows. Single teams can be added with `/draft team 
 2. `/draft channel set` in the channel, thread or forum post where the draft happens.
    For a forum, pass `channel:#forum post-title:"Draft"` and the bot creates the post.
 3. `/draft import file:teams.csv`
-4. `/draft participant add user:@alice` (repeat; use `label:` for alliance names and
-   `seat:` to add a second person to an existing seat).
+4. `/draft participant add user:@alice` for a solo participant, or
+   `/draft participant add user:@alice user2:@bob user3:@cara label:"Team 1234A"` to register
+   several people as one team that any of them can act for. Use `seat:` to add people to an
+   existing seat later.
 5. Configure: `/draft config rounds number:8`, `/draft config skip-time duration:15m`,
    `/draft config skip-hours start:09:00 end:22:00`, `/draft config timezone zone:America/Chicago`,
    `/draft config trades enabled:true`, `/draft config future-picks enabled:true` …

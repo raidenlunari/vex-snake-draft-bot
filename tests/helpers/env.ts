@@ -68,7 +68,7 @@ export function setupDraft(env: TestEnv, opts: SetupOptions = {}): SetupResult {
   env.engine.setChannel(draft.id, { channelId: 'chan-1', kind: 'text', parentChannelId: null }, ADMIN);
   const participants: ParticipantWithUsers[] = [];
   for (let i = 1; i <= n; i++) {
-    participants.push(env.engine.addParticipant(draft.id, { label: `Player ${i}`, discordUserId: `u${i}`, actor: ADMIN }));
+    participants.push(env.engine.addParticipant(draft.id, { label: `Player ${i}`, discordUserIds: [`u${i}`], actor: ADMIN }));
   }
   const teams: Team[] = [];
   for (let i = 1; i <= m; i++) {
