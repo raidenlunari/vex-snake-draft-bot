@@ -60,12 +60,14 @@ export function availableTeamsEmbed(draft: Draft, teams: AvailableTeam[], totalT
 
 export function availableTeamsButtons(draftId: number, page: number, pages: number, mode: TeamsMode): ButtonSpec[] {
   const other: TeamsMode = mode === 'grid' ? 'names' : 'grid';
+  // Every button needs a distinct custom id, so prev/next carry the action name "prev"/"next"
+  // and refresh/toggle carry their own; the handler only reads the page number and mode.
   const buttons: ButtonSpec[] = [];
   if (pages > 1) {
-    buttons.push({ id: customId('teams', 'page', draftId, Math.max(0, page - 1), mode), label: 'Previous', style: 'secondary', emoji: '◀️' });
-    buttons.push({ id: customId('teams', 'page', draftId, Math.min(pages - 1, page + 1), mode), label: 'Next', style: 'secondary', emoji: '▶️' });
+    buttons.push({ id: customId('teams', 'prev', draftId, Math.max(0, page - 1), mode), label: 'Previous', style: 'secondary', emoji: '◀️' });
+    buttons.push({ id: customId('teams', 'next', draftId, Math.min(pages - 1, page + 1), mode), label: 'Next', style: 'secondary', emoji: '▶️' });
   }
-  buttons.push({ id: customId('teams', 'page', draftId, 0, other), label: other === 'names' ? 'Show names' : 'Show grid', style: 'primary', emoji: other === 'names' ? '📝' : '🔢' });
-  buttons.push({ id: customId('teams', 'page', draftId, page, mode), label: 'Refresh', style: 'secondary', emoji: '🔄' });
+  buttons.push({ id: customId('teams', 'mode', draftId, 0, other), label: other === 'names' ? 'Show names' : 'Show grid', style: 'primary', emoji: other === 'names' ? '📝' : '🔢' });
+  buttons.push({ id: customId('teams', 'refresh', draftId, page, mode), label: 'Refresh', style: 'secondary', emoji: '🔄' });
   return buttons;
 }

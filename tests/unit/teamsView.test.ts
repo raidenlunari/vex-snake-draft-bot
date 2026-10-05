@@ -25,3 +25,16 @@ describe('/teams view', () => {
     expect(empty.description).toContain('No available teams match');
   });
 });
+
+describe('/teams buttons', () => {
+  it('never produce duplicate custom ids on any page', () => {
+    for (const pages of [1, 2, 3]) {
+      for (let page = 0; page < pages; page++) {
+        for (const mode of ['grid', 'names'] as const) {
+          const ids = availableTeamsButtons(7, page, pages, mode).map((b) => b.id);
+          expect(new Set(ids).size, `pages=${pages} page=${page} mode=${mode}`).toBe(ids.length);
+        }
+      }
+    }
+  });
+});
