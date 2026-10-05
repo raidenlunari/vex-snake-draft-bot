@@ -11,13 +11,6 @@ import { discordTimestamp } from '../../services/eventMessages.js';
 import { describeStatus } from '../../engine/context.js';
 import { customId } from '../context.js';
 
-function clockText(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
 export function seatName(p: ParticipantWithUsers | null): string {
   return p ? mentionSeat(p) : '—';
 }
@@ -26,53 +19,65 @@ export function teamLabel(t: Team): string {
   return t.teamName ? `**${t.teamNumber}** — ${t.teamName}` : `**${t.teamNumber}**`;
 }
 
+function fit(text: string, width: number): string {
+  return text.length > width ? text.slice(0, width - 1) + '…' : text.padEnd(width);
+}
+
+/**
+ * Sheet-style status: one header line, then a monospace grid of drafters by pick
+ * (the layout of the club's Google Sheet), with the drafter on the clock marked ▶.
+ */
 export function statusEmbed(state: DraftStateView, nowIso: string): EmbedPayload {
   const { draft, config, currentSlot, currentOwner } = state;
-  const lines: string[] = [];
   const window = config.skipHoursStart && config.skipHoursEnd ? { start: config.skipHoursStart, end: config.skipHoursEnd, timezone: config.timezone } : null;
+
+  const head: string[] = [];
   if (draft.status === 'active' && currentSlot) {
-    lines.push(`**Round ${currentSlot.round} / ${config.rounds}**`);
-    lines.push(`**Overall Pick #${currentSlot.overallPick}** of ${state.totalSlots}`);
-    lines.push(`**Current Player:** ${seatName(currentOwner)}`);
+    head.push(`**Round ${currentSlot.round} / ${config.rounds}** · Pick **#${currentSlot.overallPick}** of ${state.totalSlots} · ${state.availableTeams} teams left`);
+    let clock = '';
     if (draft.turnDeadlineAt) {
       const r = remainingActiveSeconds(nowIso, draft.turnDeadlineAt, window);
-      const paused = r.paused && r.resumesAt ? ` (paused until ${discordTimestamp(r.resumesAt, 't')})` : '';
-      lines.push(`**Time Remaining:** ${clockText(r.seconds)}${paused} · auto-skip ${discordTimestamp(draft.turnDeadlineAt)}`);
-    } else {
-      lines.push('**Time Remaining:** no timer');
+      clock = r.paused && r.resumesAt ? ` · timer paused until ${discordTimestamp(r.resumesAt, 't')}` : ` · auto-skip ${discordTimestamp(draft.turnDeadlineAt)}`;
     }
+    head.push(`▶ ${seatName(currentOwner)} is up${clock}`);
   } else {
-    lines.push(`**Status:** ${describeStatus(draft.status)}`);
-    if (draft.status === 'completed') lines.push(`Completed ${draft.completedAt ? discordTimestamp(draft.completedAt, 'f') : ''}`);
+    const status = draft.status === 'completed' ? `Draft complete · ${state.resolvedSlots} picks` : draft.status === 'randomized' ? 'Order set — waiting for an admin to start' : `Setting up · ${state.participants.length} drafters · ${state.totalTeams} teams`;
+    head.push(`**${status}**`);
   }
-  lines.push('');
-  lines.push(`**Available Teams:** ${state.availableTeams} / ${state.totalTeams}`);
-  if (currentOwner) {
-    const max = config.maxRosterSize ?? config.rounds * config.picksPerRound;
-    lines.push(`**Current Roster:** ${state.currentOwnerRosterCount} / ${max} picks`);
-  }
-  if (draft.status !== 'active') lines.push(`**Participants:** ${state.participants.length}`);
-  lines.push(`**Picks made:** ${state.resolvedSlots} / ${state.totalSlots || '—'}`);
 
-  const fields: EmbedPayload['fields'] = [];
-  if (state.recentPicks.length) {
-    fields.push({
-      name: 'Recent picks',
-      value: state.recentPicks.map((r) => `#${r.pick.overallPick} ${seatName(r.participant)} → ${teamLabel(r.team)}`).join('\n'),
-    });
+  const picksPerSeat = config.rounds * config.picksPerRound;
+  const columns = Math.max(picksPerSeat, ...state.grid.map((g) => g.picks.length), 1);
+  const cellWidth = Math.max(6, ...state.grid.flatMap((g) => g.picks.map((p) => p.length)));
+  const labelWidth = Math.min(16, Math.max(7, ...state.grid.map((g) => g.participant.label.length + 2)));
+  const skippedBySeat = new Map<number, number>();
+  for (const s of state.openSkippedSlots) skippedBySeat.set(s.owner.id, (skippedBySeat.get(s.owner.id) ?? 0) + 1);
+
+  const lines: string[] = [];
+  lines.push(fit('Drafter', labelWidth) + ' ' + Array.from({ length: columns }, (_, i) => fit(`P${i + 1}`, cellWidth)).join(' '));
+  for (const row of state.grid) {
+    const marker = currentOwner && row.participant.id === currentOwner.id ? '▶ ' : '  ';
+    const cells = Array.from({ length: columns }, (_, i) => row.picks[i] ?? '');
+    let open = skippedBySeat.get(row.participant.id) ?? 0;
+    for (let i = 0; i < cells.length && open > 0; i++) {
+      if (cells[i] === '') {
+        cells[i] = 'skip';
+        open -= 1;
+      }
+    }
+    lines.push(fit(marker + row.participant.label, labelWidth) + ' ' + cells.map((c) => fit(c, cellWidth)).join(' '));
   }
-  if (state.upcoming.length) {
-    fields.push({ name: 'Up next', value: state.upcoming.map((u) => `#${u.slot.overallPick} (R${u.slot.round}) ${seatName(u.owner)}`).join('\n') });
-  }
-  if (state.openSkippedSlots.length) {
-    fields.push({ name: 'Open catch-up picks', value: state.openSkippedSlots.map((s) => `#${s.slot.overallPick} ${seatName(s.owner)}`).join('\n') });
-  }
+  let grid = '```\n' + lines.join('\n') + '\n```';
+  if (grid.length > 3800) grid = '```\n' + lines.slice(0, 40).join('\n') + '\n…\n```';
+
+  const tail: string[] = [];
+  if (state.openSkippedSlots.length) tail.push(`"skip" = open catch-up pick (use /pick)`);
+  tail.push('`/teams` shows what is left · `/roster` for details');
+
   return {
-    title: `VEX Snake Draft — ${draft.name}`,
-    description: lines.join('\n'),
+    title: `${draft.name}`,
+    description: [...head, grid, ...tail].join('\n'),
     color: draft.status === 'active' ? Colors.info : draft.status === 'completed' ? Colors.success : Colors.neutral,
-    fields,
-    footer: `Draft #${draft.id} · ${config.snakeOrder ? 'snake order' : 'fixed order'} · ${config.picksPerRound} pick(s) per turn`,
+    footer: `${config.snakeOrder ? 'Snake' : 'Fixed'} order · ${config.picksPerRound} pick(s) per turn · ${picksPerSeat} per drafter${config.skipTimerSeconds ? ` · timer ${timerSummary(config)}` : ''}`,
   };
 }
 

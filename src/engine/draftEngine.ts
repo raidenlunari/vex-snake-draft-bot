@@ -81,6 +81,8 @@ export interface DraftStateView {
   upcoming: Array<{ slot: PickSlot; owner: ParticipantWithUsers }>;
   currentOwnerRosterCount: number;
   openSkippedSlots: Array<{ slot: PickSlot; owner: ParticipantWithUsers }>;
+  /** Each seat's team numbers in pick order, for the sheet-style grid. */
+  grid: Array<{ participant: ParticipantWithUsers; picks: string[] }>;
 }
 
 /**
@@ -792,6 +794,7 @@ export class DraftEngine {
       upcoming,
       currentOwnerRosterCount: currentOwner ? this.repos.assets.countActiveTeamAssets(currentOwner.id) : 0,
       openSkippedSlots: openSkipped,
+      grid: participants.map((p) => ({ participant: p, picks: this.repos.assets.listRoster(p.id).map((a) => (this.repos.teams.getById(a.teamId as number) as Team).teamNumber) })),
     };
   }
 
